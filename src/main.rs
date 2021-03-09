@@ -65,14 +65,35 @@ impl Link {
 }}
 
 #[derive(Deserialize, Serialize, Debug)]
-struct Config {
+struct ProjectConfig {
     systems : Vec<System>,
     links : Vec<Link>
 }
+#[derive(Deserialize, Serialize, Debug)]
+struct SystemConfig {
+    valid_systems : Vec<System>,
+    default : Option<PathBuf>,
+    projects : Vec<PathBuf>
+}
 
-
+impl ProjectConfig {
+    fn get_project(path : &PathBuf) -> Result<ProjectConfig> {
+        let mut file = File::open(path)?;
+        let mut buf : [u8; 4096] = [0;4096];
+        file.read(&mut buf)?;
+        toml::from_slice(&buf).map(Ok)?
+    }
+}
 
 fn main() -> Result<()>{
+
+    let app = App::new("SymSync")
+        .subcommand(
+            SubCommand::with_name("add")
+                .arg(Arg::with_name("project").short("p")))
+        .subcommand(SubCommand::with_name("control"))
+        .arg(Arg::with_name("config").short("c"));
+    let matches = app.get_matches();
 
     let config_file = if let Some(proj_dir) = ProjectDirs::from("com", "AusCyber", "SymSync"){
         let conf_dir = proj_dir.config_dir().to_path_buf();
@@ -80,12 +101,12 @@ fn main() -> Result<()>{
         if !conf_dir.exists(){
            fs::create_dir_all(&conf_dir)?;
         }
-        let config_file_loc = { let mut x = conf_dir.clone(); x.push(".links.toml"); x};
+        let config_file_loc = conf_dir.join("config.toml");
 
         let f = fs::File::create(config_file_loc)?;
 
     };
-    let matches = App::new("SymSync");
+
 
 
     Ok(())
