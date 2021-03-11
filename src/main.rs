@@ -1,53 +1,56 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::{App, Arg, SubCommand};
 use directories::{ProjectDirs, UserDirs};
 use serde::{Deserialize, Serialize};
-use std::{env, path};
 use std::io::{Read, Write};
 use std::{collections::HashMap, hash::Hash};
+use std::{env, path};
 use std::{fmt::Error, fs, fs::File, path::PathBuf};
 use structopt::StructOpt;
 
 type System = String;
 
-fn check_path(_path: String) -> Result<PathBuf> {
-    let path: PathBuf = PathBuf::from(&_path);
-
+fn check_path(path: &PathBuf) -> Result<PathBuf> {
     if path.exists() {
-        anyhow::bail!("File does not exist: {}", _path);
+        anyhow::bail!("File does not exist: {}", path.display());
     }
     if path
         .metadata()
         .map(|x| x.permissions().readonly())
         .unwrap_or(false)
     {
-        anyhow::bail!("Invalid permissions for file: {}", _path);
+        anyhow::bail!("Invalid permissions for file: {}", path.display());
     }
 
-    Ok(path)
+    Ok(path.clone())
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 #[serde(untagged)]
 enum Destination {
-    DefaultDest(PathBuf),
-    DynamicDestination(PathBuf, HashMap<System, PathBuf>),
+    DefaultDest(String),
+    DynamicDestination(String, HashMap<System, String>),
 }
 
 impl Destination {
-    pub fn new(dest: String) -> Result<Destination> {
-        Ok(Destination::DefaultDest(check_path(dest)?))
+    pub fn new(project: &ProjectConfig, dest: String) -> Result<Destination> {
+        check_path(&project.path.join(dest))?;
+        Ok(Destination::DefaultDest(dest))
     }
-    pub fn new_dyn(default: String, system_map: HashMap<System, String>) -> Result<Destination> {
-        let mut new_map: HashMap<System, PathBuf> = system_map
+    pub fn new_dyn(
+        project: &ProjectConfig,
+        default: String,
+        system_map: HashMap<System, String>,
+    ) -> Result<Destination> {
+        let mut new_map: HashMap<System, String> = system_map
             .iter()
-            .map(|(key, elem)| Ok((key.clone(), check_path(elem.clone())?)))
-            .collect::<Result<HashMap<System, PathBuf>>>()?;
+            .map(move |(key, elem)| {
+                check_path(&project.path.join(elem))?;
+                Ok((key.clone(), elem.clone()))
+            })
+            .collect::<Result<HashMap<System, String>>>()?;
 
-        Ok(Destination::DynamicDestination(
-            check_path(default)?,
-            new_map,
-        ))
+        Ok(Destination::DynamicDestination(default, new_map))
     }
 }
 
@@ -62,7 +65,7 @@ impl Link {
     pub fn new(name: String, src: String, destination: Destination) -> Result<Link> {
         Ok(Link {
             name,
-            src: check_path(src)?,
+            src: check_path(&path::Path::new(&src).to_path_buf())?,
             destination,
         })
     }
@@ -77,9 +80,8 @@ struct ProjectConfig {
     links: Vec<Link>,
 }
 
-
 impl ProjectConfig {
-    pub fn get_config_file(path : &PathBuf) -> Result<ProjectConfig>{
+    pub fn get_config_file(path: &PathBuf) -> Result<ProjectConfig> {
         let file = File::open(path)?;
         let mut data = Vec::new();
         file.read(&mut data)?;
@@ -95,12 +97,11 @@ struct SystemConfig {
 }
 
 impl SystemConfig {
-    pub fn get_config_file(path : &PathBuf) -> Result<SystemConfig>{
+    pub fn get_config_file(path: &PathBuf) -> Result<SystemConfig> {
         let file = File::open(path)?;
         let mut data = Vec::new();
         file.read(&mut data)?;
         Ok(toml::from_slice(&data)?)
-
     }
 
     pub fn new() -> SystemConfig {
@@ -127,7 +128,7 @@ struct Args {
     #[structopt(long, short)]
     quick: bool,
     #[structopt(long, short)]
-    system: Option<PathBuf>,
+    system: Option<String>,
     #[structopt(subcommand)]
     command: Command,
 }
@@ -136,7 +137,9 @@ struct Args {
 enum Command {
     Add {
         src: PathBuf,
-        destination: PathBuf
+        destination: String,
+        #[structopt(short, long)]
+        name: Option<String>,
     },
     Init,
     Revert {
@@ -152,11 +155,10 @@ fn get_config_loc() -> Option<PathBuf> {
 
 mod actions {
 
-    use std::str::FromStr;
 
     use super::*;
 
-    fn manage(sysconfig: SystemConfig, project: ProjectConfig) -> Result<SystemConfig> {
+    pub fn manage(sysconfig: SystemConfig, project: ProjectConfig) -> Result<SystemConfig> {
         let mut sysconfig = sysconfig.clone();
         if !project.path.exists() {
             bail!("Project path does not exist");
@@ -165,85 +167,94 @@ mod actions {
         Ok(sysconfig)
     }
 
-    fn add(project : ProjectConfig, name : String, src: PathBuf, destination : PathBuf, system : System, ) -> Result<ProjectConfig> {
+    pub fn add(
+        project: ProjectConfig,
+        name: String,
+        src: PathBuf,
+        destination: String,
+        system: System,
+    ) -> Result<ProjectConfig> {
         let mut project = project.clone();
-        let link = Link::new(name,src.to_str().unwrap().into(), Destination::DefaultDest(destination))?;
-
+        let link = Link::new(
+            name,
+            src.to_str().unwrap().into(),
+            Destination::DefaultDest(destination),
+        )?;
         project.links.push(link);
         Ok(project)
     }
 }
 
 mod file_actions {
-    use anyhow::{Result, bail};
+    use anyhow::{bail, Result};
     use std::fs;
     use std::path::PathBuf;
-    pub fn mv_link(path : &PathBuf, destination : &PathBuf) -> Result<()>{
+    pub fn mv_link(path: &PathBuf, destination: &PathBuf) -> Result<()> {
+        let destination = destination.clone();
         if !path.exists() {
             bail!("File does not exist: {}")
         }
-        if path.is_file(){
-            if destination.is_dir(){
+        if path.is_file() {
+            if destination.is_dir() {
                 destination.push(match path.file_name() {
                     Some(x) => x,
-                    None => bail!("not a valid file_name")
+                    None => bail!("not a valid file_name"),
                 });
             }
-            if destination.is_file(){
-                bail!("File already exists: {}",destination.display());
+            if destination.is_file() {
+                bail!("File already exists: {}", destination.display());
             }
             fs::copy(path, destination)?;
             fs::remove_file(path)?;
-            fs::soft_link(destination,path.canonicalize()?)?;
-        }else if path.is_dir(){
-             if destination.is_dir(){
+            fs::soft_link(destination, path.canonicalize()?)?;
+        } else if path.is_dir() {
+            if destination.is_dir() {
                 destination.push(match path.file_name() {
                     Some(x) => x,
-                    None => bail!("not a valid file_name")
+                    None => bail!("not a valid file_name"),
                 });
             }
-            if destination.is_file(){
-                bail!("File already exists: {}",destination.display());
+            if destination.is_file() {
+                bail!("File already exists: {}", destination.display());
             }
-            fs::cop
+            copy_folder(path, &destination)?;
+            fs::soft_link(destination, path.canonicalize()?);
+            drop((path, destination));
         }
-            bail!("File is not file or directory")
-
+        bail!("File is not file or directory")
     }
-    pub fn copy_folder(path : &PathBuf, destination : &PathBuf) -> Result<()>{
-        if !path.exists(){
+    pub fn copy_folder(path: &PathBuf, destination: &PathBuf) -> Result<()> {
+        if !path.exists() {
             bail!("Folder does not exist: {}", path.display());
         }
-        if !path.is_dir(){
+        if !path.is_dir() {
             bail!("Folder isn't actually folder: {}", path.display());
         }
-        if !destination.is_file(){
-           bail!("Destination is file");
+        if !destination.is_file() {
+            bail!("Destination is file");
         }
-        if !destination.exists(){
+        if !destination.exists() {
             fs::create_dir_all(destination);
         }
         let tru_dest = destination;
-        for entry in fs::read_dir(path)?{
+        for entry in fs::read_dir(path)? {
             let file = entry?.path();
-            let subdest = destination.join(match file.file_name(){
+            let subdest = destination.join(match file.file_name() {
                 Some(x) => x,
-                None => bail!("could not get file_name")
+                None => bail!("could not get file_name"),
             });
-            if !file.exists(){
+            if !file.exists() {
                 bail!("File does not exist: {}", file.display());
             }
-            if file.is_file(){
+            if file.is_file() {
                 fs::copy(file, subdest)?;
-            }else {
-                copy_folder(&file,&subdest)?;
+            } else {
+                copy_folder(&file, &subdest)?;
             }
         }
         Ok(())
     }
 }
-
-
 
 fn get_sys_config(config_path: Option<PathBuf>) -> Result<SystemConfig> {
     match config_path {
@@ -266,7 +277,10 @@ fn get_project_config(config_path: Option<PathBuf>) -> Result<ProjectConfig> {
             }
             ProjectConfig::get_config_file(&x)
         }
-        None => ProjectConfig::get_config_file(&(PathBuf::new().join(".links.toml").canonicalize()?)),
+        None => {
+            ProjectConfig::get_config_file(&(PathBuf::new().join(".links.toml").canonicalize()?))
+                .context("Failure using default Config")
+        }
     }
 }
 
@@ -277,13 +291,19 @@ fn main() -> Result<()> {
         Args {
             system,
             project,
-            command: Command::Add {src , destination,},
+            command:
+                Command::Add {
+                    src,
+                    destination,
+                    name,
+                },
             ..
         } => {
-           get_project_config()
-        }
+            let new_config = actions::add(get_project_config(project)?, name.unwrap_or(destination), src, destination, system.unwrap())?;
+            let new_toml = toml::to_vec(&new_config)?;
+        },
         _ => (),
-    }
+    };
 
     let config_file = if let Some(proj_dir) = ProjectDirs::from("com", "AusCyber", "SymSync") {
         let conf_dir = proj_dir.config_dir().to_path_buf();
