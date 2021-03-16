@@ -7,6 +7,7 @@ use std::{
     collections::hash_map::DefaultHasher,
     hash::Hasher,
     io::{Read, Write},
+    path::Path,
 };
 use std::{collections::HashMap, hash::Hash};
 use std::{env, path};
@@ -34,7 +35,8 @@ fn check_path(path: &PathBuf) -> Result<PathBuf> {
 #[serde(untagged)]
 enum Destination {
     DefaultDest(String),
-    DynamicDestination(String, HashMap<System, String>),
+    DynamicDestinationWithDefault(System, HashMap<System, String>),
+    DynamicDestination(HashMap<System, String>),
 }
 
 impl Destination {
@@ -42,7 +44,7 @@ impl Destination {
         check_path(&base_url.join(&dest))?;
         Ok(Destination::DefaultDest(dest.clone()))
     }
-    pub fn new_dyn(
+    pub fn with_default(
         base_url: &PathBuf,
         default: String,
         system_map: HashMap<System, String>,
@@ -55,7 +57,7 @@ impl Destination {
             })
             .collect::<Result<HashMap<System, String>>>()?;
 
-        Ok(Destination::DynamicDestination(default, new_map))
+        Ok(Destination::DynamicDestinationWithDefault(default, new_map))
     }
 }
 
@@ -108,7 +110,7 @@ pub struct SystemConfig {
 }
 
 impl SystemConfig {
-    pub fn get_config_file(path: &PathBuf) -> Result<SystemConfig> {
+    pub fn get_config_file(path: &PathBuf) -> Result<(SystemConfig)> {
         let mut file = File::open(path)?;
         let mut data = Vec::new();
         file.read(&mut data)?;
@@ -146,6 +148,7 @@ struct Args {
 
 #[derive(StructOpt)]
 enum Command {
+    Sync,
     Add {
         src: PathBuf,
         destination: String,
@@ -170,6 +173,36 @@ mod actions {
 
     use super::*;
 
+    pub fn sync(project: ProjectConfig, path: PathBuf, system: System) -> Result<()> {
+        project
+            .links
+            .iter()
+            .map(|x| {
+                let destination = path.join(match x.destination.clone() {
+                    Destination::DefaultDest(y) => y,
+                    Destination::DynamicDestination(y) => {
+                        if let Some(a) = y.get(&system) {
+                            a.clone()
+                        } else {
+                            return Ok(());
+                        }
+                    }
+                    Destination::DynamicDestinationWithDefault(a, map) => {
+                        if let Some(b) = map.get(&system).or_else(|| map.get(&a)) {
+                            b.clone()
+                        } else {
+                            return Ok(());
+                        }
+                    }
+                });
+                println!("Linking {}", x.name);
+                fs::soft_link(destination, &x.src)
+                    .context(format!("Failed linking {}", &x.name))?;
+                Ok(())
+            })
+            .collect::<Result<_>>()
+    }
+
     pub fn manage(
         sysconfig: SystemConfig,
         project: ProjectConfig,
@@ -180,6 +213,7 @@ mod actions {
             bail!("Project path does not exist");
         }
         sysconfig.add_project(project.id, project_path);
+        println!("Successfully managed {}", project.name);
         Ok(sysconfig)
     }
 
@@ -258,7 +292,6 @@ mod file_actions {
         if !destination.exists() {
             fs::create_dir_all(destination)?;
         }
-        let tru_dest = destination;
         for entry in fs::read_dir(path)? {
             let file = entry?.path();
             let subdest = destination.join(match file.file_name() {
@@ -288,18 +321,30 @@ fn get_sys_config(config_path: Option<PathBuf>) -> Result<SystemConfig> {
     }
 }
 
-fn get_project_config(config_path: Option<PathBuf>) -> Result<ProjectConfig> {
+fn get_project_config(config_path: Option<PathBuf>) -> Result<(PathBuf, ProjectConfig)> {
     match config_path {
-        Some(mut x) => {
+        Some(x) => {
             if !x.is_file() {
-                x.push(".links.toml")
+                Ok((
+                    x.clone(),
+                    ProjectConfig::get_config_file(&x.join(".links.toml"))?,
+                ))
+            } else {
+                Ok((
+                    x.parent()
+                        .context("Could not get parent folder ofconfig file")
+                        .map(Path::to_path_buf)?,
+                    ProjectConfig::get_config_file(&x)?,
+                ))
             }
-            ProjectConfig::get_config_file(&x)
         }
-        None => ProjectConfig::get_config_file(
-            &(env::current_dir()?.join(".links.toml").canonicalize()?),
-        )
-        .context("Failure using default Config"),
+        None => {
+            let proj_path = env::current_dir()?;
+            Ok((
+                proj_path.clone(),
+                ProjectConfig::get_config_file(&proj_path.join(".links.toml"))?,
+            ))
+        }
     }
 }
 
@@ -308,16 +353,29 @@ fn main() -> Result<()> {
 
     match args {
         Args {
+            command: Command::Sync,
+            project,
+            system,
+            config_file,
+            ..
+        } => {
+            let sys_config = get_sys_config(config_file)?;
+            let (path, proj_config) = get_project_config(project.or(sys_config.default))?;
+            actions::sync(proj_config, path, system.context("did not pass system")?)?;
+        }
+        Args {
             config_file,
             project,
             command: Command::Manage,
             ..
         } => {
-            let sys_config = get_sys_config(config_file)?;
-            let proj_path = project.clone().unwrap_or(env::current_dir()?);
-            let project = get_project_config(project)?;
+            let sys_config =
+                get_sys_config(config_file).context("Failure getting system config")?;
+            let (proj_path, project) = get_project_config(project.clone())
+                .context(format!("Failuring getting project {:?}", project))?;
             let name = project.name.clone();
-            manage(sys_config, project, proj_path)?;
+            manage(sys_config, project, proj_path.clone())
+                .context(format!("Failure managing {}", proj_path.clone().display()))?;
             println!("Managed {}", name);
         }
         Args {
@@ -334,7 +392,7 @@ fn main() -> Result<()> {
         } => {
             let proj_path = project.clone().unwrap_or(env::current_dir()?);
             let new_config = actions::add(
-                get_project_config(project)?,
+                get_project_config(project)?.1,
                 name.unwrap_or(destination.clone()),
                 src,
                 destination.clone(),
