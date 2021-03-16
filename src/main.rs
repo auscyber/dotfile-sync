@@ -5,6 +5,7 @@ use directories::{ProjectDirs, UserDirs};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::hash_map::DefaultHasher,
+    fmt::{write, Display},
     hash::Hasher,
     io::{Read, Write},
     path::Path,
@@ -163,8 +164,8 @@ enum Command {
         file: PathBuf,
     },
     Manage,
+    List,
 }
-
 fn get_config_loc() -> Option<PathBuf> {
     ProjectDirs::from("com", "AusCyber", "SymSync").map(|x| x.config_dir().to_path_buf())
 }
@@ -314,9 +315,12 @@ mod file_actions {
 fn get_sys_config(config_path: Option<PathBuf>) -> Result<SystemConfig> {
     match config_path {
         Some(x) => SystemConfig::get_config_file(&x),
-        None => match get_config_loc().map(|x| x.join("config.toml")) {
-            Some(x) => SystemConfig::get_config_file(&x),
-            None => Ok(SystemConfig::new()),
+        None => match get_config_loc()
+            .context("Failed to get config location")
+            .and_then(|x| Ok(x.join("config.toml").canonicalize()?))
+        {
+            Ok(x) => SystemConfig::get_config_file(&x),
+            _ => Ok(SystemConfig::new()),
         },
     }
 }
@@ -419,6 +423,16 @@ fn main() -> Result<()> {
             );
             let text = toml::to_vec(&project)?;
             fs::write(&dir.join(".links.toml"), &text)?;
+        }
+        Args {
+            project,
+            command: Command::List,
+            ..
+        } => {
+            let (_, proj) = get_project_config(project)?;
+            for link in proj.links {
+                println!("{:?}", link);
+            }
         }
         _ => (),
     };
