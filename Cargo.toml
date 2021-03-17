@@ -1,5 +1,5 @@
 [package]
-name = "dotfile-sync"
+name = "dots"
 version = "0.1.0"
 authors = ["AusCyber <willp@outlook.com.au>"]
 edition = "2018"
