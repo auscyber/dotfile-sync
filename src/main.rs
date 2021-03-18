@@ -1,13 +1,7 @@
 use anyhow::{bail, Context, Result};
 use directories::ProjectDirs;
-use serde::{Deserialize, Serialize};
 use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
     env, fs,
-    fs::File,
-    hash::{Hash, Hasher},
-    io::Read,
-    path,
     path::{Path, PathBuf},
 };
 use structopt::StructOpt;
@@ -17,17 +11,6 @@ mod config;
 mod file_actions;
 mod link;
 use config::*;
-
-fn check_path(path: &PathBuf) -> Result<PathBuf> {
-    if !path.exists() {
-        anyhow::bail!("File does not exist: {}", path.display());
-    }
-    if path.metadata().map(|x| x.permissions().readonly()).unwrap_or(true) {
-        anyhow::bail!("Invalid permissions for file: {}", path.display());
-    }
-
-    Ok(path.clone())
-}
 
 #[derive(StructOpt)]
 #[structopt(about = "Manage dotfiles")]
@@ -65,6 +48,7 @@ enum Command {
         #[structopt(short, long)]
         default: bool,
     },
+    Prune,
     List,
 }
 fn get_config_loc() -> Option<PathBuf> {
@@ -181,7 +165,16 @@ pub fn main() -> Result<()> {
                 println!("{:?}", link);
             }
         }
-        _ => (),
+        Args { project_path, project, command: Command::Prune, config_file, .. } => {
+            let (_, sys_config) = get_sys_config(config_file)?;
+            let (proj_path, proj) = get_project_config(
+                project_path
+                    .or_else(|| project.and_then(|y| sys_config.projects.get(&y).map(|x| x.path.clone())))
+                    .or(sys_config.default),
+            )?;
+            let text = toml::to_vec(&actions::prune(proj_path.clone(), proj))?;
+            fs::write(&proj_path.join(".links.toml"), &text)?;
+        }
     };
 
     Ok(())

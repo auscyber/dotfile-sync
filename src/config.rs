@@ -12,6 +12,7 @@ use std::{
 pub struct ProjectConfig {
     pub name: String,
     pub id: String,
+    pub default: Option<System>,
     pub systems: Vec<System>,
     pub links: Vec<Link>,
 }
@@ -19,7 +20,7 @@ impl ProjectConfig {
     pub fn new(name: String, path: &PathBuf) -> ProjectConfig {
         let mut hasher = DefaultHasher::new();
         name.hash(&mut hasher);
-        ProjectConfig { name, id: format!("{}", hasher.finish()), systems: Vec::new(), links: Vec::new() }
+        ProjectConfig { default: None, name, id: format!("{}", hasher.finish()), systems: Vec::new(), links: Vec::new() }
     }
 
     pub fn get_config_file(path: &PathBuf) -> Result<ProjectConfig> {

@@ -19,6 +19,7 @@ impl Link {
 #[serde(untagged)]
 pub enum Destination {
     DefaultDest(String),
+    SystemDest(System, String),
     DynamicDestinationWithDefault(System, HashMap<System, String>),
     DynamicDestination(HashMap<System, String>),
 }
