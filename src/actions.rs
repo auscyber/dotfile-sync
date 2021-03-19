@@ -6,33 +6,37 @@ pub fn sync(project: ProjectConfig, path: PathBuf, system: System) -> Result<()>
         .links
         .iter()
         .map(|x| {
-            let destination = path.join(match x.destination.clone() {
-                Destination::DefaultDest(y) => y,
-                Destination::DynamicDestination(y) => {
-                    if let Some(a) = y.get(&system) {
-                        a.clone()
-                    } else {
-                        return Ok(());
+            {
+                let destination = path.join(match x.destination.clone() {
+                    Destination::DefaultDest(y) => y,
+                    Destination::DynamicDestination(y) => {
+                        if let Some(a) = y.get(&system) {
+                            a.clone()
+                        } else {
+                            return Ok(());
+                        }
                     }
-                }
-                Destination::SystemDest(y, a) => {
-                    if y == system {
-                        a.clone()
-                    } else {
-                        return Ok(());
+                    Destination::SystemDest(y, a) => {
+                        if y == system {
+                            a.clone()
+                        } else {
+                            return Ok(());
+                        }
                     }
-                }
-                Destination::DynamicDestinationWithDefault(a, map) => {
-                    if let Some(b) = map.get(&system).or_else(|| map.get(&a)) {
-                        b.clone()
-                    } else {
-                        return Ok(());
+                    Destination::DynamicDestinationWithDefault(a, map) => {
+                        if let Some(b) = map.get(&system).or_else(|| map.get(&a)) {
+                            b.clone()
+                        } else {
+                            return Ok(());
+                        }
                     }
-                }
-            });
-            println!("Linking {}", x.name);
-            fs::soft_link(destination, &x.src).context(format!("Failed linking {}", &x.name))?;
-            Ok(())
+                });
+                println!("Linking {}", x.name);
+                fs::soft_link(destination, &x.src).context(format!("Failed linking {}", &x.name))?;
+                let res: Result<()> = Ok(());
+                res
+            }
+            .with_context(|| format!("Failed on {}", x.name))
         })
         .collect::<Result<_>>()
 }
@@ -130,4 +134,19 @@ pub fn prune(proj_path: PathBuf, project: ProjectConfig) -> ProjectConfig {
         })
         .collect::<Vec<Link>>();
     clone
+}
+
+pub fn revert(path: PathBuf, project: ProjectConfig, proj_path: &PathBuf) -> Result<ProjectConfig> {
+    let links = project
+        .links
+        .iter()
+        .filter_map(|x| {
+            let mut x = x.clone();
+            x.destination = x.destination.remove_link(&ProjectConfig::remove_start(&proj_path, &path)?)?;
+            Some(x)
+        })
+        .collect();
+    let mut project2 = project.clone();
+    project2.links = links;
+    Ok(project2)
 }

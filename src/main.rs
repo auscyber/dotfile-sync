@@ -40,10 +40,10 @@ enum Command {
     Init {
         name: Option<String>,
     },
-    //    Revert {
-    //        #[structopt(short, long)]
-    //        file: PathBuf,
-    //    },
+    Revert {
+        #[structopt(short, long)]
+        file: PathBuf,
+    },
     Manage {
         #[structopt(short, long)]
         default: bool,
@@ -164,6 +164,13 @@ pub fn main() -> Result<()> {
             for link in proj.links {
                 println!("{:?}", link);
             }
+        }
+        Args { project_path, command: Command::Revert { file }, .. } => {
+            let (proj_path, proj) = get_project_config(project_path)?;
+            let config = actions::revert(file, proj, &proj_path)?;
+            let text = toml::to_vec(&config)?;
+            fs::write(&proj_path.join(".links.toml"), &text)?;
+
         }
         Args { project_path, project, command: Command::Prune, config_file, .. } => {
             let (_, sys_config) = get_sys_config(config_file)?;

@@ -25,6 +25,43 @@ pub enum Destination {
 }
 
 impl Destination {
+    pub fn remove_link(self, link: &String) -> Option<Destination> {
+        match self {
+            Destination::DefaultDest(a) => {
+                if link != &a {
+                    Some(Destination::DefaultDest(a))
+                } else {
+                    None
+                }
+            }
+            Destination::DynamicDestination(a) => {
+                let map: HashMap<System, String> =
+                    a.iter().filter_map(|(a, x)| if link != a { Some((a.clone(), x.clone())) } else { None }).collect();
+                if map.len() == 0 {
+                    None
+                } else {
+                    Some(Destination::DynamicDestination(map))
+                }
+            }
+            Destination::SystemDest(sys, a) => {
+                if link != &a {
+                    Some(Destination::SystemDest(sys,a))
+                } else {
+                    None
+                }
+            }
+            Destination::DynamicDestinationWithDefault(def, a) => {
+                let map: HashMap<System, String> =
+                    a.iter().filter_map(|(a, x)| if link != a { Some((a.clone(), x.clone())) } else { None }).collect();
+                if map.len() == 0 {
+                    None
+                } else {
+                    Some(Destination::DynamicDestinationWithDefault(def,map))
+                }
+            }
+        }
+    }
+
     pub fn new(base_url: &PathBuf, dest: String) -> Result<Destination> {
         check_path(&base_url.join(&dest))?;
         Ok(Destination::DefaultDest(dest.clone()))

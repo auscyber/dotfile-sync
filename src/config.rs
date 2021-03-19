@@ -17,6 +17,10 @@ pub struct ProjectConfig {
     pub links: Vec<Link>,
 }
 impl ProjectConfig {
+    pub fn remove_start(proj_path: &PathBuf, path: &PathBuf) -> Option<String> {
+        Some(path.strip_prefix(proj_path).ok()?.to_str()?.to_string())
+    }
+
     pub fn new(name: String, path: &PathBuf) -> ProjectConfig {
         let mut hasher = DefaultHasher::new();
         name.hash(&mut hasher);
