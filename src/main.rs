@@ -98,7 +98,6 @@ fn get_project_config(config_path: Option<PathBuf>) -> Result<(PathBuf, ProjectC
 }
 
 pub fn main() -> Result<()> {
-    
     let Args { project_path, project, system, config_file, command } = Args::from_args();
 
     match command {
@@ -111,7 +110,7 @@ pub fn main() -> Result<()> {
             )?;
             actions::sync(proj_config, path, system.context("did not pass system")?)?;
         }
-        Command::Manage {default} => {
+        Command::Manage { default } => {
             let (sys_path, sys_config) = get_sys_config(config_file).context("Failure getting system config")?;
             let (proj_path, project) =
                 get_project_config(project_path.clone()).context(format!("Failuring getting project {:?}", project_path))?;
