@@ -1,44 +1,17 @@
 use crate::{config::*, file_actions, link::*};
 use anyhow::{bail, Context, Result};
 use std::{collections::HashMap, fs, path::PathBuf};
+
 pub fn sync(project: ProjectConfig, path: PathBuf, system: System) -> Result<()> {
-    project
-        .links
-        .iter()
-        .map(|x| {
-            {
-                let destination = path.join(match x.destination.clone() {
-                    Destination::DefaultDest(y) => y,
-                    Destination::DynamicDestination(y) => {
-                        if let Some(a) = y.get(&system) {
-                            a.clone()
-                        } else {
-                            return Ok(());
-                        }
-                    }
-                    Destination::SystemDest(y, a) => {
-                        if y == system {
-                            a.clone()
-                        } else {
-                            return Ok(());
-                        }
-                    }
-                    Destination::DynamicDestinationWithDefault(a, map) => {
-                        if let Some(b) = map.get(&system).or_else(|| map.get(&a)) {
-                            b.clone()
-                        } else {
-                            return Ok(());
-                        }
-                    }
-                });
-                println!("Linking {}", x.name);
-                fs::soft_link(destination, &x.src).context(format!("Failed linking {}", &x.name))?;
-                let res: Result<()> = Ok(());
-                res
-            }
-            .with_context(|| format!("Failed on {}", x.name))
-        })
-        .collect::<Result<_>>()
+    for link in project.links {
+        let destination = match link.destination.resolve(&system) {
+            Some(d) => path.join(d),
+            None => continue,
+        };
+        println!("Linking {}", link.name);
+        fs::soft_link(destination, &link.src).context(format!("Failed linking {}", &link.name))?;
+    }
+    Ok(())
 }
 
 pub fn manage(sysconfig: SystemConfig, project: ProjectConfig, project_path: PathBuf) -> Result<SystemConfig> {
@@ -60,21 +33,21 @@ pub fn add(
 ) -> Result<ProjectConfig> {
     let mut project = project.clone();
     let destination_ = match system {
-        Some(sys) => match project.links.iter().find(|x| x.src == local_location).map(|x| x.destination.clone()) {
+        Some(sys) => match project.links.iter().find(|link| link.src == local_location).map(|link| link.destination.clone()) {
             Some(Destination::DefaultDest(path)) => {
                 let a = project.default.clone().context("No default system to wrap pre-existing file")?;
                 Destination::DynamicDestination(vec![(a, path), (sys, project_file_loc.clone())].into_iter().collect())
             }
-            Some(Destination::SystemDest(a, path)) => {
-                Destination::DynamicDestination(vec![(a, path), (sys, project_file_loc.clone())].into_iter().collect())
+            Some(Destination::SystemDest(system, path)) => {
+                Destination::DynamicDestination(vec![(system, path), (sys, project_file_loc.clone())].into_iter().collect())
             }
-            Some(Destination::DynamicDestination(mut a)) => {
-                a.insert(sys, project_file_loc.clone());
-                Destination::DynamicDestination(a)
+            Some(Destination::DynamicDestination(mut system_map)) => {
+                system_map.insert(sys, project_file_loc.clone());
+                Destination::DynamicDestination(system_map)
             }
-            Some(Destination::DynamicDestinationWithDefault(def, mut a)) => {
-                a.insert(sys, project_file_loc.clone());
-                Destination::DynamicDestinationWithDefault(def, a)
+            Some(Destination::DynamicDestinationWithDefault(default_system, mut system_map)) => {
+                system_map.insert(sys, project_file_loc.clone());
+                Destination::DynamicDestinationWithDefault(default_system, system_map)
             }
 
             None => Destination::DefaultDest(project_file_loc.clone()),
@@ -122,8 +95,10 @@ pub fn prune(proj_path: PathBuf, project: ProjectConfig) -> ProjectConfig {
                             Some((a.clone(), x.clone()))
                         })
                         .collect();
-                    map.get(&def)?;
-                    if map.len() == 0 {
+                    if map.contains_key(&def) {
+                        return None;
+                    }
+                    if map.is_empty() {
                         None
                     } else {
                         Some(Destination::DynamicDestinationWithDefault(def, a))

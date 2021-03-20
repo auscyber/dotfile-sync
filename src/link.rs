@@ -1,8 +1,20 @@
 use crate::file_actions::check_path;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, hash::Hash, path, path::PathBuf};
-pub type System = String;
+use std::{collections::HashMap, hash::Hash, path, path::PathBuf, string::ParseError};
+
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct System(String);
+
+impl std::str::FromStr for System {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(System(s.into()))
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Link {
     pub name: String,
@@ -25,6 +37,23 @@ pub enum Destination {
 }
 
 impl Destination {
+    pub fn resolve(self, system: &System) -> Option<String> {
+        match self {
+            Destination::DefaultDest(path) => Some(path),
+            Destination::DynamicDestination(system_map) => system_map.get(system).cloned(),
+            Destination::DynamicDestinationWithDefault(path, system_map) => {
+                system_map.get(system).or_else(|| system_map.get(&path)).cloned()
+            }
+            Destination::SystemDest(default_system, default_map) => {
+                if &default_system == system {
+                    Some(default_map.clone())
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
     pub fn remove_link(self, link: &String) -> Option<Destination> {
         match self {
             Destination::DefaultDest(a) => {
@@ -36,7 +65,7 @@ impl Destination {
             }
             Destination::DynamicDestination(a) => {
                 let map: HashMap<System, String> =
-                    a.iter().filter_map(|(a, x)| if link != a { Some((a.clone(), x.clone())) } else { None }).collect();
+                    a.iter().filter_map(|(a, x)| if link != x { Some((a.clone(), x.clone())) } else { None }).collect();
                 if map.len() == 0 {
                     None
                 } else {
@@ -45,18 +74,18 @@ impl Destination {
             }
             Destination::SystemDest(sys, a) => {
                 if link != &a {
-                    Some(Destination::SystemDest(sys,a))
+                    Some(Destination::SystemDest(sys, a))
                 } else {
                     None
                 }
             }
             Destination::DynamicDestinationWithDefault(def, a) => {
                 let map: HashMap<System, String> =
-                    a.iter().filter_map(|(a, x)| if link != a { Some((a.clone(), x.clone())) } else { None }).collect();
+                    a.iter().filter_map(|(a, x)| if link != x { Some((a.clone(), x.clone())) } else { None }).collect();
                 if map.len() == 0 {
                     None
                 } else {
-                    Some(Destination::DynamicDestinationWithDefault(def,map))
+                    Some(Destination::DynamicDestinationWithDefault(def, map))
                 }
             }
         }
@@ -76,6 +105,6 @@ impl Destination {
             })
             .collect::<Result<HashMap<System, String>>>()?;
 
-        Ok(Destination::DynamicDestinationWithDefault(default, new_map))
+        Ok(Destination::DynamicDestinationWithDefault(System(default), new_map))
     }
 }
