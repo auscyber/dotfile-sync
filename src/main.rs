@@ -11,6 +11,7 @@ mod config;
 mod file_actions;
 mod link;
 use config::*;
+use link::System;
 
 #[derive(StructOpt)]
 #[structopt(about = "Manage dotfiles")]
@@ -23,7 +24,7 @@ struct Args {
     #[structopt(long, short, about = "Locate project from system projects")]
     project: Option<String>,
     #[structopt(long, short)]
-    system: Option<String>,
+    system: Option<System>,
     #[structopt(subcommand)]
     command: Command,
 }
@@ -97,10 +98,11 @@ fn get_project_config(config_path: Option<PathBuf>) -> Result<(PathBuf, ProjectC
 }
 
 pub fn main() -> Result<()> {
-    let args = Args::from_args();
+    
+    let Args { project_path, project, system, config_file, command } = Args::from_args();
 
-    match args {
-        Args { command: Command::Sync, project_path, project, system, config_file, .. } => {
+    match command {
+        Command::Sync => {
             let (_, sys_config) = get_sys_config(config_file)?;
             let (path, proj_config) = get_project_config(
                 project_path
@@ -109,7 +111,7 @@ pub fn main() -> Result<()> {
             )?;
             actions::sync(proj_config, path, system.context("did not pass system")?)?;
         }
-        Args { config_file, project_path, command: Command::Manage { default }, .. } => {
+        Command::Manage {default} => {
             let (sys_path, sys_config) = get_sys_config(config_file).context("Failure getting system config")?;
             let (proj_path, project) =
                 get_project_config(project_path.clone()).context(format!("Failuring getting project {:?}", project_path))?;
@@ -123,7 +125,7 @@ pub fn main() -> Result<()> {
             fs::write(sys_path, toml::to_vec(&config)?).context("Could not write to system config file")?;
             println!("Managed {}", name);
         }
-        Args { system, project_path, project, config_file, command: Command::Add { src, destination, name }, .. } => {
+        Command::Add { src, destination, name } => {
             let (_, sys_config) = get_sys_config(config_file)?;
             let (proj_path, project) = get_project_config(
                 project_path
@@ -144,7 +146,7 @@ pub fn main() -> Result<()> {
             fs::write(proj_path.join(".links.toml"), new_toml)?;
             println!("Added {}", src.display());
         }
-        Args { command: Command::Init { name }, .. } => {
+        Command::Init { name } => {
             let dir = env::current_dir()?;
             let project = ProjectConfig::new(
                 name.unwrap_or(dir.file_name().and_then(|x| x.to_str()).map(|x| x.into()).context("Invalid name")?),
@@ -153,7 +155,7 @@ pub fn main() -> Result<()> {
             let text = toml::to_vec(&project)?;
             fs::write(&dir.join(".links.toml"), &text)?;
         }
-        Args { project_path, project, config_file, command: Command::List, .. } => {
+        Command::List => {
             let (_, sys_config) = get_sys_config(config_file)?;
             let (_, proj) = get_project_config(
                 project_path
@@ -165,14 +167,13 @@ pub fn main() -> Result<()> {
                 println!("{:?}", link);
             }
         }
-        Args { project_path, command: Command::Revert { file }, .. } => {
+        Command::Revert { file } => {
             let (proj_path, proj) = get_project_config(project_path)?;
             let config = actions::revert(file, proj, &proj_path)?;
             let text = toml::to_vec(&config)?;
             fs::write(&proj_path.join(".links.toml"), &text)?;
-
         }
-        Args { project_path, project, command: Command::Prune, config_file, .. } => {
+        Command::Prune => {
             let (_, sys_config) = get_sys_config(config_file)?;
             let (proj_path, proj) = get_project_config(
                 project_path
