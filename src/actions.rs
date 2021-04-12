@@ -46,12 +46,13 @@ pub fn add(
     project_file_loc: Option<String>,
     system: Option<System>,
     project_path: PathBuf,
+    sysconfig: SystemConfig
 ) -> Result<ProjectConfig> {
     let mut project = project.clone();
     let project_file_loc = project_file_loc
         .or_else(|| local_location.to_str().map(|x| x.to_string()))
         .unwrap();
-    let destination_ = system
+    let destination_ = system.or_else(||sysconfig.projects.get(&project_file_loc).and_then(|x|x.system.clone()))
         .map(|ref sys| {
             Ok({
                 project
