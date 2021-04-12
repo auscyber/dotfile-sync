@@ -13,7 +13,7 @@ pub fn sync(project: ProjectConfig, path: PathBuf, system: Option<System>) -> Re
         debug!("project_path is {}", path.join(&destination).display());
         info!("Linking {}", link.name);
         let src = link.src.to_path_buf(None)?;
-        crate::util::create_folders(&src)?;
+        crate::util::create_folders(&src).context(format!("Failed creating folder hierchy for {}",&src.display()))?;
         if let Err(err) = fs::soft_link(path.join(destination), src)
             .context(format!("Failed linking {}", &link.name))
         {
