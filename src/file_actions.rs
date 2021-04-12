@@ -1,5 +1,22 @@
 use anyhow::{bail, Context, Result};
 use std::{fs, path::PathBuf};
+
+pub fn copy_path<T: AsRef<std::path::Path>, U: AsRef<std::path::Path>>(
+    src: T,
+    destination: U,
+) -> Result<()> {
+    let (src, destination) = (src.as_ref(), destination.as_ref().to_path_buf());
+
+    if src.is_file() {
+        fs::copy(src, destination)?;
+    } else if src.is_dir() {
+        copy_folder(src, &destination)?;
+    } else {
+        bail!("{} does not exist", src.display());
+    }
+    Ok(())
+}
+
 pub fn mv_link(path: &PathBuf, destination: &PathBuf) -> Result<()> {
     let mut destination = destination.clone();
     if destination.exists() && destination.is_file() {
@@ -35,7 +52,9 @@ pub fn mv_link(path: &PathBuf, destination: &PathBuf) -> Result<()> {
     }
     Ok(())
 }
-pub fn copy_folder(path: &PathBuf, destination: &PathBuf) -> Result<()> {
+pub fn copy_folder<T: AsRef<std::path::Path>>(path: T, destination: T) -> Result<()> {
+    let path = path.as_ref();
+    let destination = destination.as_ref();
     if !path.exists() {
         bail!("Folder does not exist: {}", path.display());
     }
@@ -57,8 +76,13 @@ pub fn copy_folder(path: &PathBuf, destination: &PathBuf) -> Result<()> {
         if file.is_file() {
             fs::copy(file, subdest)?;
         } else {
-            copy_folder(&file, &subdest)
-                .with_context(|| format!("Failure copying folder {} to {}", file.clone().display(), subdest.clone().display()))?;
+            copy_folder(&file, &subdest).with_context(|| {
+                format!(
+                    "Failure copying folder {} to {}",
+                    file.clone().display(),
+                    subdest.clone().display()
+                )
+            })?;
         }
     }
     Ok(())
@@ -67,7 +91,11 @@ pub fn check_path(path: &PathBuf) -> Result<PathBuf> {
     if !path.exists() {
         anyhow::bail!("File does not exist: {}", path.display());
     }
-    if path.metadata().map(|x| x.permissions().readonly()).unwrap_or(true) {
+    if path
+        .metadata()
+        .map(|x| x.permissions().readonly())
+        .unwrap_or(true)
+    {
         anyhow::bail!("Invalid permissions for file: {}", path.display());
     }
 
