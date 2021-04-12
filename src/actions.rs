@@ -12,7 +12,9 @@ pub fn sync(project: ProjectConfig, path: PathBuf, system: Option<System>) -> Re
         };
         debug!("project_path is {}", path.join(&destination).display());
         info!("Linking {}", link.name);
-        if let Err(err) = fs::soft_link(path.join(destination), link.src.to_path_buf(None)?)
+        let src = link.src.to_path_buf(None)?;
+        crate::util::create_folders(&src)?;
+        if let Err(err) = fs::soft_link(path.join(destination), src)
             .context(format!("Failed linking {}", &link.name))
         {
             error!("{}", err);
