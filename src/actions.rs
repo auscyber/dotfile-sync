@@ -13,7 +13,10 @@ pub fn sync(project: ProjectConfig, path: PathBuf, system: Option<System>) -> Re
         debug!("project_path is {}", path.join(&destination).display());
         info!("Linking {}", link.name);
         let src = link.src.to_path_buf(None)?;
-        crate::util::create_folders(&src).context(format!("Failed creating folder hierchy for {}",&src.display()))?;
+        crate::util::create_folders(&src).context(format!(
+            "Failed creating folder hierchy for {}",
+            &src.display()
+        ))?;
         if let Err(err) = fs::soft_link(path.join(destination), src)
             .context(format!("Failed linking {}", &link.name))
         {
@@ -46,25 +49,30 @@ pub fn add(
     project_file_loc: Option<String>,
     system: Option<System>,
     project_path: PathBuf,
-    sysconfig: SystemConfig
+    sysconfig: SystemConfig,
 ) -> Result<ProjectConfig> {
     let mut project = project.clone();
     let project_file_loc = project_file_loc
         .or_else(|| local_location.to_str().map(|x| x.to_string()))
         .unwrap();
-    let destination_ = system.or_else(||sysconfig.projects.get(&project_file_loc).and_then(|x|x.system.clone()))
+    let destination_ = system
+        .or_else(|| {
+            sysconfig
+                .projects
+                .get(&project_file_loc)
+                .and_then(|x| x.system.clone())
+        })
         .map(|ref sys| {
             Ok({
                 project
                     .links
                     .iter()
                     .find(|link| {
-                        let buf = link.src.clone().to_path_buf(None);
-                        if let Ok(a) = buf {
-                            a == local_location
-                        } else {
-                            false
-                        }
+                        link.src
+                            .clone()
+                            .to_path_buf(None)
+                            .and_then(|x| Ok(local_location.canonicalize()? == x.canonicalize()?))
+                            .unwrap_or(false)
                     })
                     .map(|link| {
                         Ok(match link.destination.clone() {
