@@ -55,81 +55,171 @@ pub fn add(
     let project_file_loc = project_file_loc
         .or_else(|| local_location.to_str().map(|x| x.to_string()))
         .unwrap();
-    let destination_ = system
-        .or_else(|| {
-            sysconfig
-                .projects
-                .get(&project_file_loc)
-                .and_then(|x| x.system.clone())
-        })
-        .map(|ref sys| {
-            Ok({
-                project
-                    .links
-                    .iter()
-                    .find(|link| {
-                        link.src
-                            .clone()
-                            .to_path_buf(None)
-                            .and_then(|x| Ok(local_location.canonicalize()? == x.canonicalize()?))
-                            .unwrap_or(false)
-                    })
-                    .map(|link| {
-                        Ok(match link.destination.clone() {
-                            Destination::DefaultDest(path) => {
-                                let a = project
-                                    .default
-                                    .clone()
-                                    .context("No default system to wrap pre-existing file")?;
-                                Destination::DynamicDestination(
-                                    vec![(a, path), (sys.clone(), project_file_loc.clone())]
-                                        .into_iter()
-                                        .collect(),
-                                )
-                            }
-                            Destination::SystemDest(system, path) => {
-                                Destination::DynamicDestination(
-                                    vec![(system, path), (sys.clone(), project_file_loc.clone())]
-                                        .into_iter()
-                                        .collect(),
-                                )
-                            }
-                            Destination::DynamicDestination(mut system_map) => {
-                                system_map.insert(sys.clone(), project_file_loc.clone());
-                                Destination::DynamicDestination(system_map)
-                            }
-                            Destination::DynamicDestinationWithDefault(
-                                default_system,
-                                mut system_map,
-                            ) => {
-                                system_map.insert(sys.clone(), project_file_loc.clone());
-                                Destination::DynamicDestinationWithDefault(
-                                    default_system,
-                                    system_map,
-                                )
-                            }
-                        })
-                    })
-                    .unwrap_or(Ok::<Destination, anyhow::Error>(Destination::SystemDest(
-                        sys.clone(),
-                        project_file_loc.clone(),
-                    )))?
-            })
-        })
-        .unwrap_or(Ok::<Destination, anyhow::Error>(Destination::DefaultDest(
-            project_file_loc.clone(),
-        )))?;
-    crate::util::create_folders(project_path.join(&project_file_loc))?;
-    let link = Link::new(
-        name,
-        VariablePath::from_path(&local_location)?,
-        destination_,
-    )?;
+    //    let links = system
+    //        .or_else(|| {
+    //            sysconfig
+    //                .projects
+    //                .get(&project_file_loc)
+    //                .and_then(|x| x.system.clone())
+    //        })
+    //        .map(|ref sys| {
+    //            Ok::<Vec<Link>,anyhow::Error>({
+    //                let mut links = project
+    //                    .links
+    //                    .iter()
+    //                    .map(|link| {
+    //                        if link
+    //                            .src
+    //                            .clone()
+    //                            .to_path_buf(None)
+    //                            .and_then(|x| Ok(local_location.canonicalize()? == x.canonicalize()?))
+    //                            .unwrap_or(false)
+    //                        {
+    //                            let mut link2 = link.clone();
+    //                            link2.destination = match link.destination.clone() {
+    //                                Destination::DefaultDest(path) => {
+    //                                    let a = project
+    //                                        .default
+    //                                        .clone()
+    //                                        .context("No default system to wrap pre-existing file")?;
+    //                                    Destination::DynamicDestination(
+    //                                        vec![(a, path), (sys.clone(), project_file_loc.clone())]
+    //                                            .into_iter()
+    //                                            .collect(),
+    //                                    )
+    //                                }
+    //                                Destination::SystemDest(system, path) => {
+    //                                    Destination::DynamicDestination(
+    //                                        vec![
+    //                                            (system, path),
+    //                                            (sys.clone(), project_file_loc.clone()),
+    //                                        ]
+    //                                        .into_iter()
+    //                                        .collect(),
+    //                                    )
+    //                                }
+    //                                Destination::DynamicDestination(mut system_map) => {
+    //                                    system_map.insert(sys.clone(), project_file_loc.clone());
+    //                                    Destination::DynamicDestination(system_map)
+    //                                }
+    //                                Destination::DynamicDestinationWithDefault(
+    //                                    default_system,
+    //                                    mut system_map,
+    //                                ) => {
+    //                                    system_map.insert(sys.clone(), project_file_loc.clone());
+    //                                    Destination::DynamicDestinationWithDefault(
+    //                                        default_system,
+    //                                        system_map,
+    //                                    )
+    //                                }
+    //                            };
+    //                            Ok(link2)
+    //                        } else {
+    //                            Ok(link.clone())
+    //                        }
+    //                    })
+    //                    .collect::<Result<Vec<_>>>()?;
+    //                if links
+    //                    .iter()
+    //                    .find(|link| {
+    //                        link.src
+    //                            .clone()
+    //                            .to_path_buf(None)
+    //                            .and_then(|x| Ok(local_location.canonicalize()? == x.canonicalize()?))
+    //                            .unwrap_or(false)
+    //                    })
+    //                    .is_some()
+    //                {
+    //                    let link = Link::new(
+    //                        name.clone(),
+    //                        VariablePath::from_path(&local_location)?,
+    //                        Destination::SystemDest(sys.clone(), project_file_loc.clone()),
+    //                    )?;
+    //                    links.push(link)
+    //                }
+    //                links
+    //            })
+    //        });
+    //        .unwrap_or_else(|| {
+    //            Ok::<Destination, anyhow::Error>(Destination::DefaultDest(project_file_loc.clone()))
+    //        })?;
+    let sys = system.or_else(|| {
+        sysconfig
+            .projects
+            .get(&project_file_loc)
+            .and_then(|x| x.system.clone())
+    });
 
+    let mut links2 = project.links.clone();
+    let links3 = links2
+        .iter_mut()
+        .map(|mut link| {
+            Ok::<_, anyhow::Error>(
+                if link
+                    .src
+                    .clone()
+                    .to_path_buf(None)
+                    .and_then(|x| Ok(local_location.canonicalize()? == x.canonicalize()?))
+                    .unwrap_or(false)
+                {
+                    let sys: System = sys
+                        .clone()
+                        .context("Duplicate local destination but not system was supplied")?;
+
+                    link.destination = match link.destination.clone() {
+                        Destination::DefaultDest(path) => {
+                            let a = project
+                                .default
+                                .clone()
+                                .context("No default system to wrap pre-existing file")?;
+                            Destination::DynamicDestination(
+                                vec![(a, path), (sys.clone(), project_file_loc.clone())]
+                                    .into_iter()
+                                    .collect(),
+                            )
+                        }
+                        Destination::SystemDest(system, path) => Destination::DynamicDestination(
+                            vec![(system, path), (sys.clone(), project_file_loc.clone())]
+                                .into_iter()
+                                .collect(),
+                        ),
+                        Destination::DynamicDestination(mut system_map) => {
+                            system_map.insert(sys.clone(), project_file_loc.clone());
+                            Destination::DynamicDestination(system_map)
+                        }
+                        Destination::DynamicDestinationWithDefault(
+                            default_system,
+                            mut system_map,
+                        ) => {
+                            system_map.insert(sys.clone(), project_file_loc.clone());
+                            Destination::DynamicDestinationWithDefault(default_system, system_map)
+                        }
+                    };
+                    Some(())
+                } else {
+                    None
+                },
+            )
+        })
+        .collect::<Result<Vec<_>>>()?;
+    links3
+        .into_iter()
+        .find_map(|x| x)
+        .map(Ok::<_, anyhow::Error>)
+        .unwrap_or_else(|| {
+            let destination = sys
+                .clone()
+                .map(|sys| Destination::SystemDest(sys, project_file_loc.clone()))
+                .unwrap_or(Destination::DefaultDest(project_file_loc.clone()));
+            let link = Link::new(name, VariablePath::from_path(&local_location)?, destination)?;
+            links2.push(link);
+            Ok(())
+        })?;
+    crate::util::create_folders(project_path.join(&project_file_loc))?;
     file_actions::mv_link(&local_location, &project_path.join(&project_file_loc))
         .context("Failure linking")?;
-
-    project.links.push(link);
+    //
+    project.links = links2;
     Ok(project)
 }
 

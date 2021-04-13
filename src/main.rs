@@ -99,7 +99,7 @@ pub fn main() -> Result<()> {
                     .or_else(|| {
                         project.and_then(|y| sys_config.projects.get(&y).map(|x| x.path.clone()))
                     })
-                    .or_else(||sys_config.clone().default),
+                    .or_else(|| sys_config.clone().default),
             )
             .context("Could not get project ")?;
             let new_config = actions::add(
