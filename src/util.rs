@@ -16,34 +16,67 @@ pub fn create_folders(path: impl AsRef<std::path::Path>) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
+pub enum ParsingVarError {
+    VarNotFound(std::env::VarError),
+    Other(anyhow::Error),
+}
+
+impl From<std::env::VarError> for ParsingVarError {
+    fn from(error: std::env::VarError) -> Self {
+        ParsingVarError::VarNotFound(error)
+    }
+}
+impl From<anyhow::Error> for ParsingVarError {
+    fn from(e: anyhow::Error) -> Self {
+        ParsingVarError::Other(e)
+    }
+}
+
+impl From<ParsingVarError> for anyhow::Error {
+    fn from(e: ParsingVarError) -> anyhow::Error {
+        match e {
+            ParsingVarError::VarNotFound(e) => anyhow::Error::new(e),
+            ParsingVarError::Other(e) => e,
+        }
+    }
+}
+
 pub fn parse_vars(
     use_env: bool,
-    extra_map: Option<hash_map::HashMap<String, String>>,
+    extra_map: Option<&hash_map::HashMap<String, String>>,
     text: &str,
-) -> Result<String> {
-    let get_variables: regex::Regex = regex::Regex::new(r"(?:\$(\w+))|(?:\$\{(\w+?)\})")?;
-    let value = get_variables
-        .replace_all(text, |x: &Captures| {
-            let var_name = x.get(1).or_else(|| x.get(2)).map(|x| x.as_str()).unwrap();
-            if let Some(a) = extra_map.clone() {
-                a.get(var_name).map(|x| x.clone())
-            } else {
-                None
-            }
-            .or_else(|| {
+) -> Result<String, ParsingVarError> {
+    lazy_static::lazy_static! {
+        static ref GET_VARIABLES: regex::Regex = regex::Regex::new(r"(?:\$(\w+))|(?:\$\{(\w+?)\})").unwrap();
+    }
+    let mut extra_offset: i32 = 0;
+    let mut output = text.to_string();
+    for captures in GET_VARIABLES.captures_iter(text) {
+        let matches = captures.get(1).or_else(|| captures.get(2)).unwrap();
+        let offsets = captures.get(0).or_else(|| captures.get(1)).unwrap();
+        let text = matches.as_str();
+        println!("{}", text);
+        let variable_value = extra_map
+            .as_ref()
+            .and_then(|x| x.get(text).cloned())
+            .context("Could not get extra variables from map")
+            .or_else(|_| {
                 if use_env {
-                    log::debug!("{}", var_name);
-                    let env_var = env::var(var_name).ok()?;
-                    log::debug!("{}", env_var);
-                    Some(env_var)
+                    Ok(env::var(text)?)
                 } else {
-                    None
+                    Err(ParsingVarError::Other(anyhow::Error::msg(format!(
+                        "Could not find extra variable {}",
+                        text
+                    ))))
                 }
-            })
-            .unwrap()
-            .clone()
-        })
-        .into();
-    log::debug!("{}", value);
-    Ok(value)
+            })?;
+        output.replace_range(
+            ((offsets.start() as i32 + extra_offset) as usize)
+                ..((offsets.end() as i32 + extra_offset) as usize),
+            &variable_value,
+        );
+        extra_offset += variable_value.as_str().len() as i32 - offsets.as_str().len() as i32;
+    }
+    Ok(output)
 }

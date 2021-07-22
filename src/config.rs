@@ -16,6 +16,7 @@ pub struct ProjectConfig {
     pub default: Option<System>,
     pub systems: Vec<System>,
     pub links: Vec<Link>,
+    pub variables: Option<HashMap<String, String>>,
 }
 
 impl ProjectConfig {
@@ -26,12 +27,15 @@ impl ProjectConfig {
     pub fn new(name: String, path: &PathBuf) -> ProjectConfig {
         let mut hasher = DefaultHasher::new();
         name.hash(&mut hasher);
+        path.hash(&mut hasher);
+        std::time::Instant::now().hash(&mut hasher);
         ProjectConfig {
             default: None,
             name,
             id: format!("{}", hasher.finish()),
             systems: Vec::new(),
             links: Vec::new(),
+            variables: None,
         }
     }
 
@@ -65,7 +69,7 @@ pub fn get_sys_config<T: AsRef<Path>>(config_path: Option<T>) -> Result<(PathBuf
     }
 }
 
-pub fn get_project_config(config_path: Option<PathBuf>) -> Result<(PathBuf, ProjectConfig)> {
+pub fn get_project_config(config_path: Option<&PathBuf>) -> Result<(PathBuf, ProjectConfig)> {
     match config_path {
         Some(x) => {
             if !x.is_file() {
@@ -125,6 +129,10 @@ impl SystemConfig {
             default: None,
             projects: HashMap::new(),
         }
+    }
+
+    pub fn get_project(&self, name: &String) -> Option<&ProjectOutput> {
+        self.projects.get(name)
     }
 
     pub fn add_project(&mut self, name: String, path: PathBuf) {

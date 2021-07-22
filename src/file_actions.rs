@@ -1,10 +1,7 @@
 use anyhow::{bail, Context, Result};
-use std::{fs, path::PathBuf};
+use std::{fs, path::Path, path::PathBuf};
 
-pub fn copy_path<T: AsRef<std::path::Path>, U: AsRef<std::path::Path>>(
-    src: T,
-    destination: U,
-) -> Result<()> {
+pub fn copy_path(src: impl AsRef<Path>, destination: impl AsRef<Path>) -> Result<()> {
     let (src, destination) = (src.as_ref(), destination.as_ref().to_path_buf());
 
     if src.is_file() {

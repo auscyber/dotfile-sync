@@ -17,7 +17,7 @@ pub async fn add(
     let project_config = &ctx.project;
     let original_location_cleaned = PathBuf::from(crate::util::parse_vars(
         true,
-        Some(ctx.system_config.global_variables.clone()),
+        project_config.variables.as_ref(),
         &original_location,
     )?)
     .canonicalize()?;
@@ -91,7 +91,8 @@ pub async fn add(
             source,
         )?);
     };
-    fs::copy(original_location_cleaned, output).await?;
+    fs::copy(&original_location_cleaned, &output).await?;
+    fs::symlink(&output, &original_location_cleaned).await?;
 
     todo!();
 }
