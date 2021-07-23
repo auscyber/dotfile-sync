@@ -1,4 +1,4 @@
-name: Rust
+name: tests
 
 on:
   push:
@@ -16,10 +16,5 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
       run: cargo test --verbose
-    - name: Run Clippy
-      run: - rustup component add clippy
-          - cargo clippy -- -D warnings
+
