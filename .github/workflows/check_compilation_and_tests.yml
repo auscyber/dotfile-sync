@@ -21,4 +21,5 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
     - name: Run Clippy
+      run: rustup component add clippy
       run: cargo clippy -- -D warnings
