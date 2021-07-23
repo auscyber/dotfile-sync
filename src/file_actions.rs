@@ -14,41 +14,6 @@ pub fn copy_path(src: impl AsRef<Path>, destination: impl AsRef<Path>) -> Result
     Ok(())
 }
 
-pub fn mv_link(path: &PathBuf, destination: &PathBuf) -> Result<()> {
-    let mut destination = destination.clone();
-    if destination.exists() && destination.is_file() {
-        bail!("File already exists {}", destination.display());
-    }
-    if let Some(x) = destination.parent() {
-        fs::create_dir_all(x)?;
-    }
-    if path.is_file() {
-        if destination.is_dir() {
-            destination.push(match path.file_name() {
-                Some(x) => x,
-                None => bail!("not a valid file_name"),
-            });
-        }
-        if destination.is_file() {
-            bail!("File already exists: {}", destination.display());
-        }
-        let full_path = path.canonicalize()?;
-        fs::copy(path, &destination)?;
-        fs::remove_file(path)?;
-        fs::soft_link(destination, full_path)?;
-    } else if path.is_dir() {
-        if destination.is_file() {
-            bail!("File already exists: {}", destination.display());
-        }
-        copy_folder(path, &destination)?;
-        fs::remove_dir_all(path).context("Failure removing path")?;
-        fs::soft_link(&destination.canonicalize()?, path).context("failure linking folder")?;
-        drop((path, destination));
-    } else {
-        bail!("File is not file or directory")
-    }
-    Ok(())
-}
 pub fn copy_folder<T: AsRef<std::path::Path>>(path: T, destination: T) -> Result<()> {
     let path = path.as_ref();
     let destination = destination.as_ref();
@@ -84,7 +49,7 @@ pub fn copy_folder<T: AsRef<std::path::Path>>(path: T, destination: T) -> Result
     }
     Ok(())
 }
-pub fn check_path(path: &PathBuf) -> Result<PathBuf> {
+pub fn check_path(path: &Path) -> Result<PathBuf> {
     if !path.exists() {
         anyhow::bail!("File does not exist: {}", path.display());
     }
@@ -96,5 +61,5 @@ pub fn check_path(path: &PathBuf) -> Result<PathBuf> {
         anyhow::bail!("Invalid permissions for file: {}", path.display());
     }
 
-    Ok(path.clone())
+    Ok(path.to_path_buf())
 }

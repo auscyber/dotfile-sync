@@ -35,10 +35,13 @@ impl VariablePath {
         ))
     }
 
-    pub fn to_path_buf(self, extra_variables: Option<HashMap<String, String>>) -> Result<PathBuf> {
+    pub fn to_path_buf(
+        &self,
+        extra_variables: Option<&HashMap<String, String>>,
+    ) -> Result<PathBuf> {
         Ok(PathBuf::from(crate::util::parse_vars(
             true,
-            extra_variables.as_ref(),
+            extra_variables,
             self.0.as_str(),
         )?))
     }
@@ -70,6 +73,79 @@ pub enum SourceFile {
     DynamicSourceWithDefaultSystem(System, HashMap<System, String>),
     DynamicSourceMap(HashMap<System, String>),
 }
+impl IntoIterator for SourceFile {
+    type Item = (bool, Option<System>, String);
+    type IntoIter = Box<dyn Iterator<Item = Self::Item>>;
+    fn into_iter(self) -> Self::IntoIter {
+        use SourceFile::*;
+        match self {
+            SourceWithNoSystem(path) => Box::new(Some((false, None, path)).into_iter()),
+            SourceWithSystem(sys, path) => Box::new(Some((false, Some(sys), path)).into_iter()),
+            DynamicSourceWithDefaultPath(path, map) => Box::new(
+                Some((true, None, path))
+                    .into_iter()
+                    .chain(map.into_iter().map(|(sys, path)| (false, Some(sys), path))),
+            ),
+            DynamicSourceWithDefaultSystem(_, map) => {
+                Box::new(map.into_iter().map(|(sys, path)| (true, Some(sys), path)))
+            }
+            DynamicSourceMap(map) => {
+                Box::new(map.into_iter().map(|(sys, path)| (false, Some(sys), path)))
+            }
+        }
+    }
+}
+
+pub fn convert_iter_to_source<T: Iterator<Item = (bool, Option<System>, String)>>(
+    iter: T,
+) -> Option<SourceFile> {
+    let (mut syscount, mut total) = (0, 0);
+    let vec: Vec<_> = iter
+        .map(|(b, sys, path)| {
+            if sys.is_some() {
+                syscount += 1;
+            }
+            total += 1;
+            (b, sys, path)
+        })
+        .collect();
+    Some(match (syscount, total, vec) {
+        (0, 0, _) => return None,
+        (0, 1, mut vec) => {
+            let (_, _, path) = vec.pop()?;
+            SourceFile::SourceWithNoSystem(path)
+        }
+        (1, 1, mut vec) => {
+            let (_, sys, path) = vec.pop()?;
+            SourceFile::SourceWithSystem(sys?, path)
+        }
+        (x, y, vec) if x == y => {
+            if vec.first()?.0 {
+                SourceFile::DynamicSourceWithDefaultSystem(
+                    vec.first().as_ref()?.1.as_ref()?.clone(),
+                    vec.into_iter()
+                        .skip(1)
+                        .filter_map(|(_, sys, path)| Some((sys?, path)))
+                        .collect(),
+                )
+            } else {
+                SourceFile::DynamicSourceWithDefaultPath(
+                    vec.first()?.2.clone(),
+                    vec.into_iter()
+                        .skip(1)
+                        .filter_map(|(_, sys, path)| Some((sys?, path)))
+                        .collect(),
+                )
+            }
+        }
+        (x, y, vec) if y == x + 1 => SourceFile::DynamicSourceMap(
+            vec.into_iter()
+                .filter_map(|(_, sys, path)| Some((sys?, path)))
+                .collect(),
+        ),
+        (_, _, _) => return None,
+    })
+}
 
 impl SourceFile {
     pub fn insert_link(self, sys: &System, dest_string: &str) -> Result<Self> {
@@ -79,7 +155,7 @@ impl SourceFile {
             SourceFile::SourceWithNoSystem(path) => {
                 let map = cascade! {
                     HashMap::new();
-                    ..insert(sys, dest_string.to_owned());
+                    ..insert(sys, dest_string);
                 };
                 SourceFile::DynamicSourceWithDefaultPath(path, map)
             }
@@ -134,17 +210,7 @@ impl SourceFile {
         })
     }
     pub fn contains_path(&self, path: &str) -> bool {
-        match self {
-            SourceFile::SourceWithNoSystem(x) => path == x,
-            SourceFile::SourceWithSystem(_, x) => path == x,
-            SourceFile::DynamicSourceWithDefaultPath(x, xs) => {
-                xs.iter().find(|(_, x)| *x == path).is_some() || x == path
-            }
-            SourceFile::DynamicSourceWithDefaultSystem(_, xs) => {
-                xs.iter().find(|(_, x)| *x == path).is_some()
-            }
-            SourceFile::DynamicSourceMap(xs) => xs.iter().find(|(_, x)| *x == path).is_some(),
-        }
+        self.clone().into_iter().any(|(_, _, x)| x == path)
     }
 
     pub fn resolve(&self, system: &Option<System>) -> Option<String> {
@@ -160,13 +226,13 @@ impl SourceFile {
         };
         match self {
             SourceFile::SourceWithNoSystem(path) => Some(path.clone()),
-            SourceFile::DynamicSourceMap(system_map) => system_map.get(&system).cloned(),
+            SourceFile::DynamicSourceMap(system_map) => system_map.get(system).cloned(),
             SourceFile::DynamicSourceWithDefaultSystem(sys, system_map) => system_map
-                .get(&system)
-                .or_else(|| system_map.get(&sys))
+                .get(system)
+                .or_else(|| system_map.get(sys))
                 .cloned(),
             SourceFile::DynamicSourceWithDefaultPath(path, system_map) => {
-                system_map.get(&system).or(Some(path)).cloned()
+                system_map.get(system).or(Some(path)).cloned()
             }
             SourceFile::SourceWithSystem(default_system, default_map) => {
                 if default_system == system {
@@ -178,10 +244,10 @@ impl SourceFile {
         }
     }
 
-    pub fn remove_link(self, search_path: &String) -> Option<SourceFile> {
+    pub fn remove_link(self, search_path: &str) -> Option<SourceFile> {
         match self {
             SourceFile::SourceWithNoSystem(a) => {
-                if search_path != &a {
+                if search_path != a {
                     Some(SourceFile::SourceWithNoSystem(a))
                 } else {
                     None
@@ -204,15 +270,15 @@ impl SourceFile {
                     Some(SourceFile::DynamicSourceMap(map))
                 }
             }
-            SourceFile::SourceWithSystem(sys, map) => {
-                if search_path != &map {
-                    Some(SourceFile::SourceWithSystem(sys, map))
+            SourceFile::SourceWithSystem(sys, path) => {
+                if search_path != path {
+                    Some(SourceFile::SourceWithSystem(sys, path))
                 } else {
                     None
                 }
             }
             SourceFile::DynamicSourceWithDefaultPath(path, map) => {
-                if search_path == &path {
+                if search_path == path {
                     return Some(SourceFile::DynamicSourceMap(map));
                 }
                 let map = map
@@ -247,16 +313,12 @@ impl SourceFile {
         }
     }
 
-    pub fn new(base_url: &PathBuf, dest: String) -> Result<SourceFile> {
-        Ok(SourceFile::SourceWithNoSystem(dest.clone()))
-    }
-
     pub fn with_default(
-        base_url: &PathBuf,
+        base_url: &Path,
         default: String,
         system_map: HashMap<System, String>,
     ) -> Result<SourceFile> {
-        let mut new_map: HashMap<System, String> = system_map
+        let new_map: HashMap<System, String> = system_map
             .iter()
             .map(move |(key, elem)| {
                 check_path(&base_url.join(elem))?;

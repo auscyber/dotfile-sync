@@ -7,6 +7,7 @@ mkShell {
     gcc
     rust-analyzer
     rustfmt
+    clippy-preview
   ];
 
   RUST_SRC_PATH = "${rust.packages.stable.rustPlatform.rustLibSrc}";

@@ -1,42 +1,40 @@
-use crate::{config::*, link::*};
-use anyhow::{Context, Result};
-use log::*;
-use std::{fs, path::PathBuf, sync::Arc};
-
 use crate::ProjectContext;
-use cascade;
-
+use anyhow::{Context, Result};
 use futures::future::join_all;
+use log::*;
+use std::sync::Arc;
+use tokio::fs;
+
 pub async fn sync(ctx: ProjectContext) -> Result<()> {
     let ctx = Arc::new(ctx);
     let threads = ctx.project.links.clone().into_iter().map(|link| {
         let ctx = ctx.clone();
+        //Creat async threads
         tokio::spawn(async move {
-            let project_path = &ctx.project_config_path;
-            let destination = match link.src.resolve(&ctx.system) {
-                Some(d) => project_path.join(d),
-                None => return Ok(()),
-            };
-            debug!(
-                "project_path is {}",
-                project_path.join(&destination).display()
-            );
-            info!("Linking {}", link.name);
-            let src = link.destination.to_path_buf(None)?;
-            crate::util::create_folders(&src).context(format!(
-                "Failed creating folder hierchy for {}",
-                &src.display()
-            ))?;
+            async {
+                let project_path = &ctx.project_config_path;
+                let destination = match link.src.resolve(&ctx.system) {
+                    Some(d) => project_path.join(d),
+                    None => return Ok(()),
+                };
+                debug!("project_path is {}", project_path.display());
+                let src = link.destination.to_path_buf(None)?;
+                fs::create_dir_all(&src.parent().context("Could not get parent folder")?)
+                    .await
+                    .context(format!(
+                        "Failed creating folder hierchy for {}",
+                        &src.display()
+                    ))?;
+                if src.exists() && src.canonicalize()? == destination.canonicalize()? {
+                    info!(r#""{}" already linked"#, destination.display());
+                    return Ok(());
+                }
 
-            if let Err(err) = fs::soft_link(project_path.join(destination), src)
-                .context(format!("Failed linking {}", &link.name))
-            {
-                error!("{}", err);
-                err.chain()
-                    .skip(1)
-                    .for_each(|cause| error!("\treason : {}", cause));
-            };
-            Ok::<_, anyhow::Error>(())
+                fs::symlink(destination, src).await?;
+                Ok::<_, anyhow::Error>(())
+            }
+            .await
+            .context(format!("Failed linking {}", &link.name))
         })
     });
     join_all(threads)

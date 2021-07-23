@@ -20,11 +20,11 @@ pub struct ProjectConfig {
 }
 
 impl ProjectConfig {
-    pub fn remove_start(proj_path: &PathBuf, path: &PathBuf) -> Option<String> {
+    pub fn remove_start(proj_path: &Path, path: &Path) -> Option<String> {
         Some(path.strip_prefix(proj_path).ok()?.to_str()?.to_string())
     }
 
-    pub fn new(name: String, path: &PathBuf) -> ProjectConfig {
+    pub fn new(name: String, path: &Path) -> ProjectConfig {
         let mut hasher = DefaultHasher::new();
         name.hash(&mut hasher);
         path.hash(&mut hasher);
@@ -39,11 +39,9 @@ impl ProjectConfig {
         }
     }
 
-    pub fn get_config_file(path: &PathBuf) -> Result<ProjectConfig> {
-        Ok(
-            toml::from_slice(&(fs::read(path).context("Project conf doesnt exist")?))
-                .context("failed passing config file")?,
-        )
+    pub fn get_config_file(path: &Path) -> Result<ProjectConfig> {
+        toml::from_slice(&(fs::read(path).context("Project conf doesnt exist")?))
+            .context("failed passing config file")
     }
 }
 
@@ -82,7 +80,7 @@ pub fn get_project_config(config_path: Option<&PathBuf>) -> Result<(PathBuf, Pro
                     x.parent()
                         .context("Could not get parent folder of config file")
                         .map(Path::to_path_buf)?,
-                    ProjectConfig::get_config_file(&x)?,
+                    ProjectConfig::get_config_file(x)?,
                 ))
             }
         }
@@ -92,10 +90,7 @@ pub fn get_project_config(config_path: Option<&PathBuf>) -> Result<(PathBuf, Pro
             if !file_path.exists() {
                 bail!("No config file in current directory")
             }
-            Ok((
-                proj_path.clone(),
-                ProjectConfig::get_config_file(&file_path)?,
-            ))
+            Ok((proj_path, ProjectConfig::get_config_file(&file_path)?))
         }
     }
 }
@@ -115,12 +110,8 @@ pub struct SystemConfig {
 impl SystemConfig {
     pub fn get_config_file<T: AsRef<Path>>(path: &T) -> Result<SystemConfig> {
         let path = path.as_ref();
-        let data = fs::read(path).with_context(|| {
-            format!(
-                "Could not find system config file {}",
-                path.clone().display()
-            )
-        })?;
+        let data = fs::read(path)
+            .with_context(|| format!("Could not find system config file {}", path.display()))?;
         Ok(toml::from_slice(&data)?)
     }
 
@@ -131,7 +122,7 @@ impl SystemConfig {
         }
     }
 
-    pub fn get_project(&self, name: &String) -> Option<&ProjectOutput> {
+    pub fn get_project(&self, name: &str) -> Option<&ProjectOutput> {
         self.projects.get(name)
     }
 

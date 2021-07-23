@@ -2,12 +2,17 @@
 use crate::{config::*, file_actions, link::*};
 use anyhow::{bail, Context, Result};
 use log::*;
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 mod add;
+mod prune;
 mod sync;
 
 pub use add::add;
+pub use prune::prune;
 pub use sync::sync;
 
 pub fn manage(ctx: &super::ProjectContext, make_default: bool) -> Result<SystemConfig> {
@@ -24,74 +29,17 @@ pub fn manage(ctx: &super::ProjectContext, make_default: bool) -> Result<SystemC
     Ok(sysconfig)
 }
 
-pub fn prune(proj_path: PathBuf, project: ProjectConfig) -> ProjectConfig {
-    todo!();
-    let mut clone = project.clone();
-    clone.links = project
-        .links
-        .iter()
-        .filter_map(|x| {
-            let mut x = x.clone();
-            if !x.destination.clone().to_path_buf(None).ok()?.exists() {
-                return None;
-            } else {
-                return Some(x);
-            }
-            // let mut x = x.clone();
-            // x.destination = match x.destination {
-            //     Destination::DefaultDest(a) => proj_path.join(a.clone()).canonicalize().map(|_| Destination::DefaultDest(a)).ok(),
-            //     Destination::DynamicDestination(a) => {
-            //         let map: HashMap<System, String> = a
-            //             .iter()
-            //             .filter_map(|(a, x)| {
-            //                 proj_path.join(x).canonicalize().ok();
-            //                 Some((a.clone(), x.clone()))
-            //             })
-            //             .collect();
-            //         if map.len() == 0 {
-            //             None
-            //         } else {
-            //             Some(Destination::DynamicDestination(map))
-            //         }
-            //     }
-            //     Destination::SystemDest(sys, a) => {
-            //         proj_path.join(a.clone()).canonicalize().map(|_| Destination::SystemDest(sys, a)).ok()
-            //     }
-            //     Destination::DynamicDestinationWithDefault(def, a) => {
-            //         let map: HashMap<System, String> = a
-            //             .iter()
-            //             .filter_map(|(a, x)| {
-            //                 proj_path.join(x).canonicalize().ok();
-            //                 Some((a.clone(), x.clone()))
-            //             })
-            //             .collect();
-            //         if map.contains_key(&def) {
-            //             return None;
-            //         }
-            //         if map.is_empty() {
-            //             None
-            //         } else {
-            //             Some(Destination::DynamicDestinationWithDefault(def, a))
-            //         }
-            //     }
-            // }?;
-            //            Some(x)
-        })
-        .collect::<Vec<Link>>();
-    clone
-}
-
 pub fn revert(
     path: PathBuf,
     project: ProjectConfig,
-    proj_path: &PathBuf,
+    proj_path: &Path,
     system: Option<System>,
 ) -> Result<ProjectConfig> {
     let path = path.canonicalize()?;
     let proj_path = proj_path
         .canonicalize()
         .context("Could not canonicalize project path")?;
-    if let None = ProjectConfig::remove_start(&proj_path, &path) {
+    if ProjectConfig::remove_start(&proj_path, &path).is_none() {
         bail!("File is not a link inside valid directory")
     }
     let links = project
@@ -102,7 +50,6 @@ pub fn revert(
             let mut link = link.clone();
             let dest_str = link
                 .src
-                .clone()
                 .resolve(&system)
                 .context("Could not resolve system")?;
             let dest = proj_path
@@ -128,13 +75,13 @@ pub fn revert(
                     }
                 };
             }
-            Ok(Some(link.clone()))
+            Ok(Some(link))
         })
         .collect::<Result<Vec<_>>>()?
         .into_iter()
-        .filter_map(|x| x)
+        .flatten()
         .collect();
-    let mut project2 = project.clone();
+    let mut project2 = project;
     project2.links = links;
     Ok(project2)
 }

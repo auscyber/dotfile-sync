@@ -1,20 +1,5 @@
 use anyhow::*;
-use regex::Captures;
-use std::{collections::hash_map, env, fs};
-use structopt::lazy_static::lazy;
-
-pub fn create_folders(path: impl AsRef<std::path::Path>) -> Result<()> {
-    match fs::DirBuilder::new()
-        .recursive(true)
-        .create(match path.as_ref().parent() {
-            Some(x) => x,
-            None => return Ok(()),
-        }) {
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Ok(()),
-        lol => lol?,
-    }
-    Ok(())
-}
+use std::{collections::hash_map, env};
 
 #[derive(Debug)]
 pub enum ParsingVarError {

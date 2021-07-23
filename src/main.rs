@@ -1,11 +1,11 @@
 #![feature(bindings_after_at)]
 use anyhow::{Context, Result};
 use log::*;
-use std::{env, fs, path::PathBuf};
+use std::{env, path::PathBuf};
 use structopt::StructOpt;
 
 use std::convert::TryInto;
-use std::sync::Arc;
+use tokio::fs;
 
 mod actions;
 mod config;
@@ -45,8 +45,7 @@ pub struct ProjectContext {
 impl TryInto<ProjectContext> for Args {
     type Error = anyhow::Error;
     fn try_into(self) -> Result<ProjectContext> {
-        let (system_config_file, system_config) =
-            get_sys_config(self.config_file.as_ref())?.to_owned();
+        let (system_config_file, system_config) = get_sys_config(self.config_file.as_ref())?;
         let (path, proj_config) = get_project_config(
             self.project_path
                 .as_ref()
@@ -56,10 +55,8 @@ impl TryInto<ProjectContext> for Args {
                         .and_then(|y| system_config.projects.get(&y))
                         .map(|x| &x.path)
                 })
-                .or(system_config.default.as_ref())
-                .clone(),
-        )?
-        .to_owned();
+                .or_else(|| system_config.default.as_ref()),
+        )?;
 
         let system = self
             .system
@@ -83,9 +80,15 @@ impl TryInto<ProjectContext> for Args {
         })
     }
 }
+impl ProjectContext {
+    //    pub fn write_to_file(&self, config: ProjectConfig) -> Result<()> {
+    //        let new_toml = toml::to_vec(&final_project_config)?;
+    //        fs::write(ctx.project_config_path.join(".links.toml"), new_toml).await?;
+    //    }
+}
 
 impl Args {
-    fn to_context(self) -> Result<ProjectContext> {
+    fn try_to_context(self) -> Result<ProjectContext> {
         self.try_into()
     }
 }
@@ -130,12 +133,13 @@ pub async fn main() -> Result<()> {
             actions::sync(args.try_into()?).await?;
         }
         Command::Manage { default } => {
-            let ctx = args.to_context()?;
+            let ctx = args.try_to_context()?;
             let config = actions::manage(&ctx, default).context(format!(
                 "Failure managing {}",
                 ctx.project_config_path.display()
             ))?;
             fs::write(ctx.system_config_path, toml::to_vec(&config)?)
+                .await
                 .context("Could not write to system config file")?;
             info!("Managed {}", ctx.project.name);
         }
@@ -144,13 +148,10 @@ pub async fn main() -> Result<()> {
             destination,
             name,
         } => {
-            let ctx = args.to_context()?;
-            let new_config = actions::add(&ctx, src, destination, name)
+            let ctx = args.try_to_context()?;
+            actions::add(&ctx, src, destination, name)
                 .await
                 .context("Failure adding link")?;
-            let new_toml = toml::to_vec(&new_config)?;
-            fs::write(ctx.project_config_path.join(".links.toml"), new_toml)?;
-            info!("Added {}", ctx.project.name);
         }
         Command::Init { name } => {
             let dir = env::current_dir()?;
@@ -164,7 +165,7 @@ pub async fn main() -> Result<()> {
                 &dir,
             );
             let text = toml::to_vec(&project)?;
-            fs::write(&dir.join(".links.toml"), &text)?;
+            fs::write(&dir.join(".links.toml"), &text).await?;
         }
         Command::List => {
             let (_, sys_config) = get_sys_config(config_file)?;
@@ -208,23 +209,15 @@ pub async fn main() -> Result<()> {
                         .clone()
                         .system
                 })
-                .or(proj.default.clone());
+                .or_else(|| proj.default.clone());
             let config = actions::revert(file, proj, &proj_path, system)?;
             let text = toml::to_vec(&config)?;
-            fs::write(&proj_path.join(".links.toml"), &text)?;
+            fs::write(&proj_path.join(".links.toml"), &text).await?;
         }
         Command::Prune => {
-            let (_, sys_config) = get_sys_config(config_file)?;
-            let (proj_path, proj) = get_project_config(
-                project_path
-                    .or_else(|| {
-                        project.and_then(|y| sys_config.projects.get(&y).map(|x| x.path.clone()))
-                    })
-                    .or(sys_config.default)
-                    .as_ref(),
-            )?;
-            let text = toml::to_vec(&actions::prune(proj_path.clone(), proj))?;
-            fs::write(&proj_path.join(".links.toml"), &text)?;
+            let ctx = args.try_to_context()?;
+            let text = toml::to_vec(&actions::prune(&ctx)?)?;
+            fs::write(&ctx.project_config_path.join(".links.toml"), &text).await?;
         }
     };
     Ok(())
