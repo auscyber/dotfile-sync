@@ -26,6 +26,7 @@
 
         dots = naersk-lib.buildPackage {
           pname = "dots";
+          nativeBuildInputs = with pkgs; [pkg-config];
           root = ./.;
         };
 

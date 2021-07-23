@@ -2,6 +2,8 @@
 name = "dots"
 version = "0.1.0"
 authors = ["AusCyber <willp@outlook.com.au>"]
+repository = "https://github.com/auscyberman/dotfile-sync"
+
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
