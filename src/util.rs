@@ -65,3 +65,24 @@ pub fn parse_vars(
     }
     Ok(output)
 }
+
+use serde::{de::DeserializeOwned, Serialize};
+use std::fs;
+use std::path::Path;
+pub trait WritableConfig: Sized {
+    fn write_to_file(&self, file_name: &Path) -> Result<()>;
+    fn read_from_file(file_name: &Path) -> Result<Self>;
+}
+
+impl<T: Sync + DeserializeOwned + Send + Serialize + Clone> WritableConfig for T {
+    fn read_from_file(file_name: &Path) -> Result<Self> {
+        let data = fs::read(file_name)?;
+        let val = toml::from_slice(&data)?;
+        Ok(val)
+    }
+    fn write_to_file(&self, path: &Path) -> Result<()> {
+        let data = toml::to_vec(self)?;
+        fs::write(path, &data)?;
+        Ok(())
+    }
+}

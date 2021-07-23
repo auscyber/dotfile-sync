@@ -18,6 +18,7 @@ mod util;
 
 use config::*;
 use link::System;
+use util::WritableConfig;
 
 #[derive(StructOpt, Clone)]
 #[structopt(about = "Manage dotfiles")]
@@ -143,9 +144,11 @@ pub async fn main() -> Result<()> {
             name,
         } => {
             let ctx = args.try_to_context()?;
-            actions::add(&ctx, src, destination, name)
+            let config = actions::add(&ctx, src, destination, name)
                 .await
                 .context("Failure adding link")?;
+            let data = toml::to_vec(&config)?;
+            fs::write(ctx.project_config_path.join(".links.toml"), data).await?;
         }
         Command::Init { name } => {
             let dir = env::current_dir()?;
@@ -176,8 +179,7 @@ pub async fn main() -> Result<()> {
         }
         Command::Prune => {
             let ctx = args.try_to_context()?;
-            let text = toml::to_vec(&actions::prune(&ctx)?)?;
-            fs::write(&ctx.project_config_path.join(".links.toml"), &text).await?;
+            actions::prune(&ctx)?.write_to_file(&ctx.project_config_path.join(".links.toml"))?;
         }
     };
     Ok(())

@@ -1,4 +1,4 @@
-use crate::{link::*, ProjectContext};
+use crate::{config::ProjectConfig, link::*, ProjectContext};
 use anyhow::{bail, Context, Result};
 use cascade::cascade;
 use log::*;
@@ -12,7 +12,7 @@ pub async fn add(
     //Location of where to place it in the project
     destination: Option<String>,
     name: Option<String>,
-) -> Result<()> {
+) -> Result<ProjectConfig> {
     let project_config = &ctx.project;
     let original_location_cleaned = PathBuf::from(crate::util::parse_vars(
         true,
@@ -127,11 +127,9 @@ pub async fn add(
         ctx.project.clone();
         ..links = completed_links;
     };
-    let data = toml::to_vec(&final_project_config)?;
     move_link(&original_location_cleaned, &output_dest).await?;
-    fs::write(ctx.project_config_path.join(".links.toml"), data).await?;
     info!("Added {}", name);
-    Ok(())
+    Ok(final_project_config)
 }
 
 async fn move_link(original_locaction_cleaned: &Path, output_dest: &Path) -> Result<()> {
