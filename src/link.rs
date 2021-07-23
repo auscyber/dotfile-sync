@@ -3,13 +3,16 @@ use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    fmt,
     path::{Path, PathBuf},
     string::ParseError,
 };
 
 use cascade::cascade;
+use colored::*;
+use derive_more::Display;
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize, Display)]
 #[serde(transparent)]
 pub struct System(String);
 
@@ -21,7 +24,7 @@ impl std::str::FromStr for System {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone, Display)]
 #[serde(transparent)]
 pub struct VariablePath(String);
 
@@ -63,6 +66,18 @@ impl Link {
         })
     }
 }
+impl std::fmt::Display for Link {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Name: {} Destination: {} Link Sources: \n {}",
+            self.name.yellow(),
+            format!("\"{}\"", self.destination).green(),
+            format!("{}", self.src).red()
+        )?;
+        Ok(())
+    }
+}
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 #[serde(untagged)]
@@ -91,6 +106,36 @@ impl IntoIterator for SourceFile {
             }
             DynamicSourceMap(map) => {
                 Box::new(map.into_iter().map(|(sys, path)| (false, Some(sys), path)))
+            }
+        }
+    }
+}
+impl fmt::Display for SourceFile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SourceFile::SourceWithNoSystem(path) => writeln!(f, "\tPath: {}", path),
+            SourceFile::SourceWithSystem(sys, path) => {
+                writeln!(f, "\tSystem: {}, Path: {} ", sys, path)
+            }
+            SourceFile::DynamicSourceMap(map) => map
+                .iter()
+                .try_for_each(|(system, path)| writeln!(f, "\tSystem: {}, Path: {}", system, path)),
+            SourceFile::DynamicSourceWithDefaultPath(path, map) => {
+                writeln!(f, "\tDefault Path: {}", path)?;
+                map.iter().try_for_each(|(system, path)| {
+                    writeln!(f, "\tSystem: {}, Path: {}", system, path)
+                })
+            }
+            SourceFile::DynamicSourceWithDefaultSystem(system, map) => {
+                writeln!(
+                    f,
+                    "\tDefault system: {}   Default Path: {}",
+                    system,
+                    map.get(system).unwrap()
+                )?;
+                map.iter().try_for_each(|(system, path)| {
+                    writeln!(f, "\tSystem: {:?}, Path: {}", system, path)
+                })
             }
         }
     }

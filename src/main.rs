@@ -123,9 +123,9 @@ pub async fn main() -> Result<()> {
     let Args {
         project_path,
         project,
-        system,
         config_file,
         command,
+        ..
     } = args.clone();
 
     match command {
@@ -183,36 +183,10 @@ pub async fn main() -> Result<()> {
             }
         }
         Command::Revert { file } => {
-            let (proj_path, proj) = get_project_config(
-                project_path
-                    .or_else(|| {
-                        project.and_then(|y| {
-                            get_sys_config(config_file.clone())
-                                .ok()?
-                                .1
-                                .projects
-                                .get(&y)
-                                .map(|x| x.path.clone())
-                        })
-                    })
-                    .or_else(|| get_sys_config(config_file.clone()).ok()?.1.default)
-                    .as_ref(),
-            )
-            .context("Could not find project_path")?;
-            let system = system
-                .or_else(|| {
-                    get_sys_config(config_file)
-                        .ok()?
-                        .1
-                        .projects
-                        .get(&proj.name)?
-                        .clone()
-                        .system
-                })
-                .or_else(|| proj.default.clone());
-            let config = actions::revert(file, proj, &proj_path, system)?;
+            let ctx = args.try_to_context()?;
+            let config = actions::revert(&ctx, &file).await?;
             let text = toml::to_vec(&config)?;
-            fs::write(&proj_path.join(".links.toml"), &text).await?;
+            fs::write(&ctx.project_config_path.join(".links.toml"), &text).await?;
         }
         Command::Prune => {
             let ctx = args.try_to_context()?;
