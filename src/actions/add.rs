@@ -19,8 +19,22 @@ pub async fn add(
         project_config.variables.as_ref(),
         &original_location,
     )?)
-    .canonicalize()?;
-
+    .canonicalize()
+    .context("file could not be located")?;
+    let original_location = {
+        let p = PathBuf::from(original_location);
+        if same_file::is_same_file(&p, &original_location_cleaned)? {
+            if !p.has_root() {
+                std::env::current_dir()?.join(p)
+            } else {
+                p
+            }
+        } else {
+            original_location_cleaned.clone()
+        }
+    }
+    .to_string_lossy()
+    .to_string();
     let output_dest: String = match destination.map(PathBuf::from) {
         Some(destination) => {
             let mut output = match destination.clone().strip_prefix(&ctx.project_config_path) {
@@ -114,8 +128,8 @@ pub async fn add(
         ..links = completed_links;
     };
     let data = toml::to_vec(&final_project_config)?;
-    fs::write(ctx.project_config_path.join(".links.toml"), data).await?;
     move_link(&original_location_cleaned, &output_dest).await?;
+    fs::write(ctx.project_config_path.join(".links.toml"), data).await?;
     info!("Added {}", name);
     Ok(())
 }
@@ -127,6 +141,12 @@ async fn move_link(original_locaction_cleaned: &Path, output_dest: &Path) -> Res
     } else {
         fs::remove_file(original_locaction_cleaned).await?;
     }
+    debug!(
+        "loc = {} \n dest = {}",
+        original_locaction_cleaned.display(),
+        output_dest.display()
+    );
+
     fs::symlink(output_dest, original_locaction_cleaned).await?;
     Ok(())
 }

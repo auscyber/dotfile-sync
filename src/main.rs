@@ -4,6 +4,7 @@ use log::*;
 use std::{env, path::PathBuf};
 use structopt::StructOpt;
 
+use colored::*;
 use std::convert::TryInto;
 use tokio::fs;
 
@@ -120,14 +121,7 @@ enum Command {
 pub async fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let args = Args::from_args();
-    let Args {
-        project_path,
-        project,
-        config_file,
-        command,
-        ..
-    } = args.clone();
-
+    let command = args.command.clone();
     match command {
         Command::Sync => {
             actions::sync(args.try_into()?).await?;
@@ -168,18 +162,10 @@ pub async fn main() -> Result<()> {
             fs::write(&dir.join(".links.toml"), &text).await?;
         }
         Command::List => {
-            let (_, sys_config) = get_sys_config(config_file)?;
-            let (_, proj) = get_project_config(
-                project_path
-                    .or_else(|| {
-                        project.and_then(|y| sys_config.projects.get(&y).map(|x| x.path.clone()))
-                    })
-                    .or(sys_config.default)
-                    .as_ref(),
-            )?;
-
-            for link in proj.links {
-                println!("{:?}", link);
+            let ctx = args.try_to_context()?;
+            println!("{} {}", "Links for".bold(), ctx.project.name.bold());
+            for link in ctx.project.links {
+                print!("{}", link);
             }
         }
         Command::Revert { file } => {
