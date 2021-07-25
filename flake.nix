@@ -17,7 +17,7 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         # Add rust nightly to pkgs
-        pkgs = nixpkgs.legacyPackages.${system} // { inherit (fenix.packages.${system}.latest) cargo rustc rust-src clippy-preview;  };
+        pkgs = nixpkgs.legacyPackages.${system} // { inherit (fenix.packages.${system}.default) cargo rustc rust-src clippy-preview;  };
 
         naersk-lib = (naersk.lib."${system}".override {
           cargo = pkgs.cargo;
