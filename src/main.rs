@@ -80,6 +80,7 @@ impl TryInto<ProjectContext> for Args {
         })
     }
 }
+
 impl ProjectContext {
     //    pub fn write_to_file(&self, config: ProjectConfig) -> Result<()> {
     //        let new_toml = toml::to_vec(&final_project_config)?;
@@ -97,7 +98,8 @@ impl Args {
 enum Command {
     Sync,
     Add {
-        src: String,
+        src: Vec<String>,
+        #[structopt(short, long)]
         destination: Option<String>,
         #[structopt(short, long)]
         name: Option<String>,
