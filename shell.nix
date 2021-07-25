@@ -7,6 +7,7 @@ mkShell {
     gcc
     rust-analyzer
     rustfmt
+#    clippy
     clippy-preview
   ];
 
