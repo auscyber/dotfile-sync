@@ -47,7 +47,7 @@ async fn add_individual_link(
                 &original_location
             )
         };
-        VariablePath::from_string(original_location)
+        VariablePath::from(original_location)
     };
 
     //clean and realise path
@@ -186,13 +186,7 @@ async fn manage_list(
             if ctx.project_config_path.join(&dest_file).exists() {
                 bail!("file {} already exists", dest_file);
             }
-            Ok((
-                false,
-                cleaned,
-                dest_file,
-                VariablePath::from_string(path),
-                file_name,
-            ))
+            Ok((false, cleaned, dest_file, path.into(), file_name))
         })
         .try_collect()?;
 

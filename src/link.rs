@@ -28,10 +28,13 @@ impl std::str::FromStr for System {
 #[serde(transparent)]
 pub struct VariablePath(String);
 
-impl VariablePath {
-    pub fn from_string(a: impl AsRef<str>) -> VariablePath {
+impl<T: AsRef<str>> From<T> for VariablePath {
+    fn from(a: T) -> Self {
         VariablePath(a.as_ref().to_owned())
     }
+}
+
+impl VariablePath {
     pub fn from_path(a: impl AsRef<Path>) -> Result<VariablePath> {
         Ok(VariablePath(
             a.as_ref().canonicalize()?.to_string_lossy().into(),

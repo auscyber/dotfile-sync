@@ -22,7 +22,7 @@ pub async fn revert(ctx: &crate::ProjectContext, path: &Path) -> Result<ProjectC
 
             debug!("link_dest = {:?} {:?}", link_dest, ac_path);
             new_link.src = convert_iter_to_source(link.src.clone().into_iter().filter(|x| {
-                println!("src = {}", ctx.project_config_path.join(&x.2).display());
+                debug!("src = {}", ctx.project_config_path.join(&x.2).display());
                 if same_file::is_same_file(ctx.project_config_path.join(&x.2), &ac_path)
                     .unwrap_or(false)
                 {
@@ -37,10 +37,10 @@ pub async fn revert(ctx: &crate::ProjectContext, path: &Path) -> Result<ProjectC
         })
         .collect();
     let dest = dest_path.context("could not find path in links")?;
-    println!("dest is {}", dest.display());
+    debug!("dest is {}", dest.display());
     fs::remove_file(&dest).await?;
     fs::copy(&ac_path, dest).await?;
-    if ac_path.is_dir() {
+    if ac_path.is_file() {
         fs::remove_file(&ac_path).await?;
     } else {
         fs::remove_dir_all(&ac_path).await?;
