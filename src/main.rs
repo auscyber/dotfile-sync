@@ -1,4 +1,3 @@
-#![feature(bindings_after_at)]
 use anyhow::{Context, Result};
 use log::*;
 use std::{env, path::PathBuf};
@@ -6,7 +5,6 @@ use structopt::StructOpt;
 
 use colored::*;
 use std::convert::TryInto;
-use tokio::fs;
 
 mod actions;
 mod config;
@@ -133,9 +131,7 @@ pub async fn main() -> Result<()> {
                 "Failure managing {}",
                 ctx.project_config_path.display()
             ))?;
-            fs::write(ctx.system_config_path, toml::to_vec(&config)?)
-                .await
-                .context("Could not write to system config file")?;
+            config.write_to_file(&ctx.system_config_path)?;
             info!("Managed {}", ctx.project.name);
         }
         Command::Add {
@@ -147,8 +143,7 @@ pub async fn main() -> Result<()> {
             let config = actions::add(&ctx, src, destination, name)
                 .await
                 .context("Failure adding link")?;
-            let data = toml::to_vec(&config)?;
-            fs::write(ctx.project_config_path.join(".links.toml"), data).await?;
+            config.write_to_file(&ctx.project_config_path.join(".links.toml"))?;
         }
         Command::Init { name } => {
             let dir = env::current_dir()?;
@@ -161,8 +156,7 @@ pub async fn main() -> Result<()> {
                 ),
                 &dir,
             );
-            let text = toml::to_vec(&project)?;
-            fs::write(&dir.join(".links.toml"), &text).await?;
+            project.write_to_file(&dir.join(".links.toml"))?;
         }
         Command::List => {
             let ctx = args.try_to_context()?;
@@ -174,8 +168,7 @@ pub async fn main() -> Result<()> {
         Command::Revert { file } => {
             let ctx = args.try_to_context()?;
             let config = actions::revert(&ctx, &file).await?;
-            let text = toml::to_vec(&config)?;
-            fs::write(&ctx.project_config_path.join(".links.toml"), &text).await?;
+            config.write_to_file(&ctx.project_config_path.join(".links.toml"))?;
         }
         Command::Prune => {
             let ctx = args.try_to_context()?;
