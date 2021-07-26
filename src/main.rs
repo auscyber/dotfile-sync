@@ -96,7 +96,9 @@ impl Args {
 
 #[derive(StructOpt, Clone)]
 enum Command {
+    #[structopt(about = "Link all files in project")]
     Sync,
+    #[structopt(about = "Move and link project")]
     Add {
         src: Vec<String>,
         #[structopt(short, long)]
@@ -104,17 +106,18 @@ enum Command {
         #[structopt(short, long)]
         name: Option<String>,
     },
-    Init {
-        name: Option<String>,
-    },
-    Revert {
-        file: PathBuf,
-    },
+    #[structopt(about = "Initalise project")]
+    Init { name: Option<String> },
+    #[structopt(about = "Revert path")]
+    Revert { file: PathBuf },
+    #[structopt(about = "Add project to system configuration")]
     Manage {
         #[structopt(short, long)]
         default: bool,
     },
+    #[structopt(about = "Prune all removed files in the project")]
     Prune,
+    #[structopt(about = "List all links in the project")]
     List,
 }
 
