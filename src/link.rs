@@ -11,6 +11,7 @@ use std::{
 use cascade::cascade;
 use colored::*;
 use derive_more::Display;
+use itertools::Itertools;
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize, Display)]
 #[serde(transparent)]
@@ -370,7 +371,7 @@ impl SourceFile {
                 check_path(&base_url.join(&elem))?;
                 Ok((key, elem))
             })
-            .collect::<Result<HashMap<System, String>>>()?;
+            .try_collect::<_, _, anyhow::Error>()?;
 
         Ok(SourceFile::DynamicSourceWithDefaultSystem(
             System(default),

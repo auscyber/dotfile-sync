@@ -21,6 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: cargo build --release
+      - uses: actions/upload-artifact@v2
         with:
           name: binary
           path: target/release/dots
