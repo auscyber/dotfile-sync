@@ -21,14 +21,13 @@ use util::WritableConfig;
 #[derive(StructOpt, Clone)]
 #[structopt(about = "Manage dotfiles")]
 pub struct Args {
-    #[structopt(short, long)]
-    #[structopt(long, about = "Location of system config file")]
+    #[structopt(short, long, about = "Location of system config file", global = true)]
     config_file: Option<PathBuf>,
-    #[structopt(long)]
+    #[structopt(long, global = true)]
     project_path: Option<PathBuf>,
-    #[structopt(long, short, about = "Locate project from system projects")]
+    #[structopt(long, short, about = "Locate project from system projects", global = true)]
     project: Option<String>,
-    #[structopt(long, short)]
+    #[structopt(long, short, global = true)]
     system: Option<System>,
     #[structopt(subcommand)]
     command: Command,
