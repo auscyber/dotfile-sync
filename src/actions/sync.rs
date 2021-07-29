@@ -29,7 +29,7 @@ pub async fn sync(ctx: ProjectContext) -> Result<()> {
                                 .context(format!("Could not get file name for {}", link.name))?,
                         );
                     }
-                    if temp_dest.exists() && temp_dest.canonicalize()? == source.canonicalize()? {
+                    if temp_dest.exists() && same_file::is_same_file(&temp_dest, &source)? {
                         info!(r#""{}" already linked"#, source.display());
                         return Ok(());
                     } else if temp_dest.exists() {
