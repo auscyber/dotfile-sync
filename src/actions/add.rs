@@ -166,17 +166,16 @@ async fn manage_list(
         .into_iter()
         .dedup()
         .map(|mut path| {
-            let cleaned = PathBuf::from(crate::util::parse_vars(
-                true,
-                ctx.project.variables.as_ref(),
-                &path,
-            )?)
-            .canonicalize()
-            .context(format!(r#"file "{}" could not be found"#, &path))?;
             let p = PathBuf::from(&path);
             if p.exists() && !p.has_root() {
                 path = format!("{}/{}", std::env::current_dir()?.display(), path)
             };
+            let variable_path: VariablePath = path.clone().into();
+            let cleaned = variable_path
+                .to_path_buf(ctx.project.variables.as_ref())?
+                .canonicalize()
+                .context(format!(r#"file "{}" could not be found"#, &path))?;
+
             let file_name: String = cleaned
                 .file_name()
                 .map(|x| x.to_string_lossy())
@@ -186,7 +185,7 @@ async fn manage_list(
             if ctx.project_config_path.join(&dest_file).exists() {
                 bail!("file {} already exists", dest_file);
             }
-            Ok((false, cleaned, dest_file, path.into(), file_name))
+            Ok((false, cleaned, dest_file, variable_path, file_name))
         })
         .try_collect()?;
 
