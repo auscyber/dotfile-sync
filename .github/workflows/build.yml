@@ -2,9 +2,17 @@ name: build
 
 on:
   push:
+    branches: [ master ]
     paths:
       - 'Cargo.toml'
       - 'src'
+
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'Cargo.toml'
+      - '**.rs'
+
 
 
 jobs:
