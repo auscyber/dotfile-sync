@@ -263,13 +263,11 @@ impl SourceFile {
 
     pub fn resolve(&self, system: &Option<System>) -> Option<String> {
         let system = match system {
-            None => {
-                if let SourceFile::SourceWithNoSystem(path) = self {
-                    return Some(path.clone());
-                } else {
-                    return None;
-                }
-            }
+            None => match self {
+                SourceFile::SourceWithNoSystem(path) => return Some(path.clone()),
+                SourceFile::DynamicSourceWithDefaultPath(path, _) => return Some(path.clone()),
+                _ => return None,
+            },
             Some(x) => x,
         };
         match self {
