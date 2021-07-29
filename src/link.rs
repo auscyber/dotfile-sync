@@ -365,7 +365,6 @@ impl SourceFile {
         system_map: HashMap<System, String>,
     ) -> Result<SourceFile> {
         let new_map: HashMap<System, String> = system_map
-            .clone()
             .into_iter()
             .map(move |(key, elem)| {
                 check_path(&base_url.join(&elem))?;
