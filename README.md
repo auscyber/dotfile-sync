@@ -93,7 +93,7 @@ To only link `file` when the system is `desktop`
 
 #### On another computer
 To sync with no extra paremeters  
-`curl https://git.io/JBB45 | sh -s `  
+`curl -Ls https://git.io/JBB45 | sh -s `  
 To add extra paremeters `--system "desktop"`  
-`curl https://git.io/JBB45 | sh -s -- --system "desktop"`
+`curl -Ls https://git.io/JBB45 | sh -s -- --system "desktop"`
 
