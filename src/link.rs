@@ -365,10 +365,11 @@ impl SourceFile {
         system_map: HashMap<System, String>,
     ) -> Result<SourceFile> {
         let new_map: HashMap<System, String> = system_map
-            .iter()
+            .clone()
+            .into_iter()
             .map(move |(key, elem)| {
-                check_path(&base_url.join(elem))?;
-                Ok((key.clone(), elem.clone()))
+                check_path(&base_url.join(&elem))?;
+                Ok((key, elem))
             })
             .collect::<Result<HashMap<System, String>>>()?;
 
