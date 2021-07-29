@@ -15,6 +15,7 @@ You can create system dependent links to alleviate all your stress
 1. [Features](#features)
 2. [Installation](#installation)
 3. [Configuration](#configuration)
+4. [Usage](#usage)
 
 
 ## Features <a name="features"></a>
@@ -75,5 +76,24 @@ with these attributes
 * `src`:  The relative location of the actual file in the project
 * `destination`: The location for the `src` to be linked to
 
+## Usage <a name="usage"></a>
+#### Adding multiple files
+To add the files `file1` `file2`
 
+`dots add file1 file2`
+
+#### Set destination of files
+To put the file `file1` in project/`files/file2`
+
+`dots add file1 -d files/file2`
+
+#### Add file dependent on system
+To only link `file` when the system is `desktop`  
+`dots add file1 --system "desktop"`
+
+#### On another computer
+To sync with no extra paremeters  
+`curl https://git.io/JBB45 | sh -s `  
+To add extra paremeters `--system "desktop"`  
+`curl https://git.io/JBB45 | sh -s -- --system "desktop"`
 
