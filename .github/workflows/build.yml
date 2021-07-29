@@ -11,7 +11,7 @@ on:
     branches: [ master ]
     paths:
       - 'Cargo.toml'
-      - '**.rs'
+      - 'src/**.rs'
 
 
 
