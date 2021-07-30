@@ -3,6 +3,13 @@ name = "dots"
 version = "0.1.0"
 authors = ["AusCyber <willp@outlook.com.au>"]
 repository = "https://github.com/auscyberman/dotfile-sync"
+description = "a dotfile syncing software"
+exclude = [
+    ".github",
+    "**.nix",
+    "flake.lock",
+]
+readme = "README.md"
 
 edition = "2018"
 
