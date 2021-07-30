@@ -1,3 +1,4 @@
+use crate::goals::Goal;
 use crate::link::{Link, System};
 use crate::util::WritableConfig;
 use anyhow::{bail, Context, Result};
@@ -18,6 +19,7 @@ pub struct ProjectConfig {
     pub systems: Vec<System>,
     pub links: Vec<Link>,
     pub variables: Option<HashMap<String, String>>,
+    pub goals: Option<Vec<Goal>>,
 }
 
 impl ProjectConfig {
@@ -37,6 +39,7 @@ impl ProjectConfig {
             systems: Vec::new(),
             links: Vec::new(),
             variables: None,
+            goals: None,
         }
     }
 }

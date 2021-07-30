@@ -9,6 +9,7 @@ use std::convert::TryInto;
 mod actions;
 mod config;
 mod file_actions;
+mod goals;
 mod link;
 #[cfg(test)]
 mod tests;
@@ -25,7 +26,12 @@ pub struct Args {
     config_file: Option<PathBuf>,
     #[structopt(long, global = true)]
     project_path: Option<PathBuf>,
-    #[structopt(long, short, about = "Locate project from system projects", global = true)]
+    #[structopt(
+        long,
+        short,
+        about = "Locate project from system projects",
+        global = true
+    )]
     project: Option<String>,
     #[structopt(long, short, global = true)]
     system: Option<System>,
