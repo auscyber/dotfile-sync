@@ -1,7 +1,6 @@
-
 {
   inputs = {
-    flake-compat =  {
+    flake-compat = {
       url = "github:edolstra/flake-compat";
       flake = false;
     };
@@ -13,11 +12,11 @@
     };
     naersk.url = "github:nmattia/naersk";
   };
-  outputs = { self, flake-utils, fenix, nixpkgs, naersk,  ... }:
+  outputs = { self, flake-utils, fenix, nixpkgs, naersk, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         # Add rust nightly to pkgs
-        pkgs = nixpkgs.legacyPackages.${system} // { inherit (fenix.packages.${system}.default) cargo rustc rust-src clippy-preview;  };
+        pkgs = nixpkgs.legacyPackages.${system} // { inherit (fenix.packages.${system}.latest) cargo rustc rust-src clippy-preview; inherit (fenix.packages.${system}) rust-analyzer; };
 
         naersk-lib = (naersk.lib."${system}".override {
           cargo = pkgs.cargo;
@@ -26,7 +25,7 @@
 
         dots = naersk-lib.buildPackage {
           pname = "dots";
-          nativeBuildInputs = with pkgs; [pkg-config];
+          nativeBuildInputs = with pkgs; [ pkg-config ];
           root = ./.;
         };
 
