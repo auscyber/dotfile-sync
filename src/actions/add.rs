@@ -1,4 +1,4 @@
-use crate::{config::ProjectConfig, link::*, ProjectContext};
+use crate::{config::ProjectConfig, file_actions::recurse_copy, link::*, ProjectContext};
 use anyhow::{bail, Context, Result};
 use cascade::cascade;
 use itertools::Itertools;
@@ -37,7 +37,6 @@ async fn add_individual_link(
     name: Option<String>,
 ) -> Result<ProjectConfig> {
     //Append current directory if it is a generic location
-
     let original_location = {
         let p = PathBuf::from(&original_location);
         if p.exists() && !p.has_root() {
@@ -132,11 +131,12 @@ async fn add_individual_link(
         .collect::<Result<Vec<_>, anyhow::Error>>()?;
 
     if !found {
-        let source = match &ctx.args.system {
-            Some(sys) => SourceFile::SourceWithSystem(sys.clone(), output_dest.to_owned()),
-            None => SourceFile::SourceWithNoSystem(output_dest.to_owned()),
+        let source = SourceFile::Source {
+            system: ctx.args.system.clone(),
+            src: output_dest.clone(),
         };
-        completed_links.push(Link::new(name.clone(), original_location, source)?);
+        debug!("name is orig: {}, source: {}", original_location, source);
+        completed_links.push(Link::new(name.clone(), original_location, source));
     };
 
     let output_dest = ctx.project_config_path.join(output_dest);
@@ -225,12 +225,12 @@ async fn manage_list(
     }
 
     for (_, _, dest_file, p, name) in triples.into_iter().filter(|x| x.0) {
-        let source = match &ctx.args.system {
-            Some(sys) => SourceFile::SourceWithSystem(sys.clone(), dest_file),
-            None => SourceFile::SourceWithNoSystem(dest_file),
+        let source = SourceFile::Source {
+            system: ctx.args.system.clone(),
+            src: dest_file,
         };
 
-        new_links.push(Link::new(name.to_string(), p, source)?);
+        new_links.push(Link::new(name.to_string(), p, source));
     }
 
     let new_project = cascade! {
@@ -241,7 +241,11 @@ async fn manage_list(
 }
 
 async fn move_link(original_locaction_cleaned: &Path, output_dest: &Path) -> Result<()> {
-    fs::copy(original_locaction_cleaned, output_dest).await?;
+    if original_locaction_cleaned.is_dir() {
+        recurse_copy(original_locaction_cleaned, output_dest).await?;
+    } else {
+        fs::copy(original_locaction_cleaned, output_dest).await?;
+    }
     if fs::metadata(original_locaction_cleaned).await?.is_dir() {
         fs::remove_dir_all(original_locaction_cleaned).await?;
     } else {

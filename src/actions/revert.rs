@@ -1,4 +1,4 @@
-use crate::{config::*, link::*};
+use crate::{config::*, file_actions::recurse_copy, link::*};
 use log::*;
 
 use anyhow::*;
@@ -38,11 +38,13 @@ pub async fn revert(ctx: &crate::ProjectContext, path: &Path) -> Result<ProjectC
         .collect();
     let dest = dest_path.context("could not find path in links")?;
     debug!("dest is {}", dest.display());
+
     fs::remove_file(&dest).await?;
-    fs::copy(&ac_path, dest).await?;
     if ac_path.is_file() {
+        fs::copy(&ac_path, dest).await?;
         fs::remove_file(&ac_path).await?;
     } else {
+        recurse_copy(&ac_path, &dest).await?;
         fs::remove_dir_all(&ac_path).await?;
     }
     new_project.links = new_links;

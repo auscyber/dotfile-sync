@@ -58,16 +58,17 @@ impl VariablePath {
 pub struct Link {
     pub name: String,
     pub destination: VariablePath,
+    #[serde(flatten)]
     pub src: SourceFile,
 }
 
 impl Link {
-    pub fn new(name: String, src: VariablePath, destination: SourceFile) -> Result<Link> {
-        Ok(Link {
+    pub fn new(name: String, src: VariablePath, destination: SourceFile) -> Link {
+        Link {
             name,
             destination: src,
             src: destination,
-        })
+        }
     }
 }
 impl std::fmt::Display for Link {
@@ -86,59 +87,80 @@ impl std::fmt::Display for Link {
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 #[serde(untagged)]
 pub enum SourceFile {
-    SourceWithNoSystem(String),
-    SourceWithSystem(System, String),
-    DynamicSourceWithDefaultPath(String, HashMap<System, String>),
-    DynamicSourceWithDefaultSystem(System, HashMap<System, String>),
-    DynamicSourceMap(HashMap<System, String>),
+    Source {
+        system: Option<System>,
+        src: String,
+    },
+    DynamicSource {
+        default_path: Option<String>,
+        default_system: Option<System>,
+        source_map: HashMap<System, String>,
+    },
 }
+
+//impl<'de> Deserialize<'de> for SourceFile {
+//    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//    where
+//        D: serde::Deserializer<'de>,
+//    {
+//        struct
+//    }
+//}
+//impl<'se> Serialize<'se> for SourceFile {}
+
 impl IntoIterator for SourceFile {
     type Item = (bool, Option<System>, String);
     type IntoIter = Box<dyn Iterator<Item = Self::Item>>;
     fn into_iter(self) -> Self::IntoIter {
         use SourceFile::*;
         match self {
-            SourceWithNoSystem(path) => Box::new(Some((false, None, path)).into_iter()),
-            SourceWithSystem(sys, path) => Box::new(Some((false, Some(sys), path)).into_iter()),
-            DynamicSourceWithDefaultPath(path, map) => Box::new(
-                Some((true, None, path))
-                    .into_iter()
-                    .chain(map.into_iter().map(|(sys, path)| (false, Some(sys), path))),
-            ),
-            DynamicSourceWithDefaultSystem(_, map) => {
-                Box::new(map.into_iter().map(|(sys, path)| (true, Some(sys), path)))
-            }
-            DynamicSourceMap(map) => {
-                Box::new(map.into_iter().map(|(sys, path)| (false, Some(sys), path)))
-            }
+            Source { src: path, system } => Box::new(Some((false, system, path)).into_iter()),
+            DynamicSource {
+                default_path,
+                source_map: map,
+                default_system,
+            } => Box::new(default_path.map(|s| (false, None, s)).into_iter().chain(
+                map.into_iter().map(move |(sys, path)| {
+                    (
+                        default_system
+                            .as_ref()
+                            .map(|system| system == &sys)
+                            .unwrap_or(false),
+                        Some(sys),
+                        path,
+                    )
+                }),
+            )),
         }
     }
 }
 impl fmt::Display for SourceFile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SourceFile::SourceWithNoSystem(path) => writeln!(f, "\tPath: {}", path),
-            SourceFile::SourceWithSystem(sys, path) => {
-                writeln!(f, "\tSystem: {}, Path: {} ", sys, path)
+            SourceFile::Source { system, src: path } => {
+                write!(f, "\t")?;
+                system
+                    .as_ref()
+                    .map_or(Ok(()), |sys| write!(f, "System: {} ", sys))?;
+                writeln!(f, "Path: {}", path)
             }
-            SourceFile::DynamicSourceMap(map) => map
-                .iter()
-                .try_for_each(|(system, path)| writeln!(f, "\tSystem: {}, Path: {}", system, path)),
-            SourceFile::DynamicSourceWithDefaultPath(path, map) => {
-                writeln!(f, "\tDefault Path: {}", path)?;
+            SourceFile::DynamicSource {
+                default_system,
+                default_path,
+                source_map: map,
+            } => {
+                write!(f, "\t")?;
+                default_path
+                    .as_ref()
+                    .map_or(Ok(()), |p| write!(f, "Default Path: {} ", p))?;
+                default_system
+                    .as_ref()
+                    .map_or(Ok(()), |s| write!(f, "Default System: {}", s))?;
+                if default_path.is_some() || default_system.is_some() {
+                    writeln!(f)?;
+                }
                 map.iter().try_for_each(|(system, path)| {
                     writeln!(f, "\tSystem: {}, Path: {}", system, path)
-                })
-            }
-            SourceFile::DynamicSourceWithDefaultSystem(system, map) => {
-                writeln!(
-                    f,
-                    "\tDefault system: {}   Default Path: {}",
-                    system,
-                    map.get(system).unwrap()
-                )?;
-                map.iter().try_for_each(|(system, path)| {
-                    writeln!(f, "\tSystem: {:?}, Path: {}", system, path)
                 })
             }
         }
@@ -148,52 +170,46 @@ impl fmt::Display for SourceFile {
 pub fn convert_iter_to_source<T: Iterator<Item = (bool, Option<System>, String)>>(
     iter: T,
 ) -> Option<SourceFile> {
-    let (mut syscount, mut total) = (0, 0);
+    let mut total = 0;
     let vec: Vec<_> = iter
         .map(|(b, sys, path)| {
-            if sys.is_some() {
-                syscount += 1;
-            }
             total += 1;
             (b, sys, path)
         })
         .collect();
-    Some(match (syscount, total, vec) {
-        (0, 0, _) => return None,
-        (0, 1, mut vec) => {
-            let (_, _, path) = vec.pop()?;
-            SourceFile::SourceWithNoSystem(path)
+    match (total, vec) {
+        (0, _) => None,
+        (1, mut vec) => {
+            let (_, system, path) = vec.pop()?;
+            Some(SourceFile::Source { system, src: path })
         }
-        (1, 1, mut vec) => {
-            let (_, sys, path) = vec.pop()?;
-            SourceFile::SourceWithSystem(sys?, path)
-        }
-        (x, y, vec) if x == y => {
-            if vec.first()?.0 {
-                SourceFile::DynamicSourceWithDefaultSystem(
-                    vec.first().as_ref()?.1.as_ref()?.clone(),
-                    vec.into_iter()
-                        .skip(1)
-                        .filter_map(|(_, sys, path)| Some((sys?, path)))
-                        .collect(),
-                )
-            } else {
-                SourceFile::DynamicSourceWithDefaultPath(
-                    vec.first()?.2.clone(),
-                    vec.into_iter()
-                        .skip(1)
-                        .filter_map(|(_, sys, path)| Some((sys?, path)))
-                        .collect(),
-                )
-            }
-        }
-        (x, y, vec) if y == x + 1 => SourceFile::DynamicSourceMap(
-            vec.into_iter()
-                .filter_map(|(_, sys, path)| Some((sys?, path)))
+        (_, vec) => Some(SourceFile::DynamicSource {
+            default_path: vec.iter().find_map(|x| {
+                if x.1.is_none() {
+                    Some(x.2.clone())
+                } else {
+                    None
+                }
+            }),
+            default_system: vec.iter().find_map(|x| {
+                if x.0 {
+                    Some(x.1.as_ref()?.clone())
+                } else {
+                    None
+                }
+            }),
+            source_map: vec
+                .iter()
+                .filter_map(|x| {
+                    if !x.0 {
+                        Some((x.1.as_ref()?.clone(), x.2.clone()))
+                    } else {
+                        None
+                    }
+                })
                 .collect(),
-        ),
-        (_, _, _) => return None,
-    })
+        }),
+    }
 }
 
 impl SourceFile {
@@ -201,60 +217,43 @@ impl SourceFile {
         let dest_string = dest_string.to_owned();
         let sys = sys.clone();
         Ok(match self {
-            SourceFile::SourceWithNoSystem(path) => {
-                let map = cascade! {
-                    HashMap::new();
-                    ..insert(sys, dest_string);
-                };
-                SourceFile::DynamicSourceWithDefaultPath(path, map)
-            }
-            SourceFile::SourceWithSystem(system, path) => {
-                if system == sys {
+            SourceFile::Source { system, src: path } => {
+                if !system.as_ref().map_or(false, |x| x == &sys) {
+                    let map = cascade! {
+                        HashMap::new();
+                        ..insert(sys, dest_string);
+                    };
+                    SourceFile::DynamicSource {
+                        default_system: system,
+                        default_path: Some(path),
+                        source_map: map,
+                    }
+                } else {
                     bail!(
                         r#"System "{:?}" already defined for output file "{}" "#,
                         sys,
                         dest_string
                     );
                 }
-                let map = cascade! {
-                    HashMap::new();
-                    ..insert(system.clone(),path);
-                    ..insert(sys,dest_string);
-                };
-                SourceFile::DynamicSourceWithDefaultSystem(system, map)
             }
-            SourceFile::DynamicSourceWithDefaultPath(path, mut map) => {
-                if map.contains_key(&sys) {
+            SourceFile::DynamicSource {
+                default_path,
+                default_system,
+                source_map: mut map,
+            } => {
+                if map.contains_key(&sys) || default_system.as_ref().map_or(false, |x| x == &sys) {
                     bail!(
-                        r#"System "{:?}" already defined for output file "{}" "#,
-                        sys,
-                        dest_string
-                    );
-                }
-                map.insert(sys, dest_string);
-                SourceFile::DynamicSourceWithDefaultPath(path, map)
-            }
-            SourceFile::DynamicSourceWithDefaultSystem(system, mut map) => {
-                if system == sys || map.contains_key(&system) {
-                    bail!(
-                        r#"System "{:?}" already defined for output file "{}" "#,
+                        r#"System "{}" already defined for output file "{}" "#,
                         sys,
                         dest_string
                     );
                 }
                 map.insert(sys, dest_string);
-                SourceFile::DynamicSourceWithDefaultSystem(system, map)
-            }
-            SourceFile::DynamicSourceMap(mut map) => {
-                if map.contains_key(&sys) {
-                    bail!(
-                        r#"System "{:?}" already defined for output file "{}" "#,
-                        sys,
-                        dest_string
-                    );
+                SourceFile::DynamicSource {
+                    default_path,
+                    default_system,
+                    source_map: map,
                 }
-                map.insert(sys, dest_string);
-                SourceFile::DynamicSourceMap(map)
             }
         })
     }
@@ -265,82 +264,59 @@ impl SourceFile {
     pub fn resolve(&self, system: &Option<System>) -> Option<String> {
         let system = match system {
             None => match self {
-                SourceFile::SourceWithNoSystem(path) => return Some(path.clone()),
-                SourceFile::DynamicSourceWithDefaultPath(path, _) => return Some(path.clone()),
+                SourceFile::Source { src: path, .. } => return Some(path.clone()),
+                SourceFile::DynamicSource {
+                    default_path: Some(default_path),
+                    ..
+                } => return Some(default_path.clone()),
                 _ => return None,
             },
             Some(x) => x,
         };
         match self {
-            SourceFile::SourceWithNoSystem(path) => Some(path.clone()),
-            SourceFile::DynamicSourceMap(system_map) => system_map.get(system).cloned(),
-            SourceFile::DynamicSourceWithDefaultSystem(sys, system_map) => system_map
-                .get(system)
-                .or_else(|| system_map.get(sys))
-                .cloned(),
-            SourceFile::DynamicSourceWithDefaultPath(path, system_map) => {
-                system_map.get(system).or(Some(path)).cloned()
-            }
-            SourceFile::SourceWithSystem(default_system, default_map) => {
-                if default_system == system {
-                    Some(default_map.clone())
+            SourceFile::Source {
+                src: path,
+                system: sys,
+            } => {
+                if sys.as_ref().map_or(true, |x| x == system) {
+                    Some(path.clone())
                 } else {
                     None
                 }
             }
+            SourceFile::DynamicSource {
+                default_path,
+                default_system,
+                source_map: map,
+            } => map
+                .get(system)
+                .or_else(|| map.get(default_system.as_ref()?))
+                .or_else(|| default_path.as_ref())
+                .cloned(),
         }
     }
 
     pub fn remove_link(self, search_path: &str) -> Option<SourceFile> {
         match self {
-            SourceFile::SourceWithNoSystem(a) => {
-                if search_path != a {
-                    Some(SourceFile::SourceWithNoSystem(a))
-                } else {
-                    None
-                }
-            }
-            SourceFile::DynamicSourceMap(a) => {
-                let map: HashMap<System, String> = a
-                    .iter()
-                    .filter_map(|(a, x)| {
-                        if search_path != x {
-                            Some((a.clone(), x.clone()))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                if map.is_empty() {
-                    None
-                } else {
-                    Some(SourceFile::DynamicSourceMap(map))
-                }
-            }
-            SourceFile::SourceWithSystem(sys, path) => {
+            SourceFile::Source { src: path, system } => {
                 if search_path != path {
-                    Some(SourceFile::SourceWithSystem(sys, path))
+                    Some(SourceFile::Source { src: path, system })
                 } else {
                     None
                 }
             }
-            SourceFile::DynamicSourceWithDefaultPath(path, map) => {
-                if search_path == path {
-                    return Some(SourceFile::DynamicSourceMap(map));
+            SourceFile::DynamicSource {
+                default_path,
+                source_map: map,
+                default_system,
+            } => {
+                if default_path.as_ref().map_or(false, |x| x == search_path) {
+                    return Some(SourceFile::DynamicSource {
+                        default_path: None,
+                        source_map: map,
+                        default_system,
+                    });
                 }
-                let map = map
-                    .into_iter()
-                    .filter_map(|(k, x)| {
-                        if search_path != x.as_str() {
-                            Some((k, x))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<HashMap<System, String>>();
-                Some(SourceFile::DynamicSourceWithDefaultPath(path, map))
-            }
-            SourceFile::DynamicSourceWithDefaultSystem(def, map) => {
                 let map: HashMap<System, String> = map
                     .iter()
                     .filter_map(|(a, x)| {
@@ -354,7 +330,11 @@ impl SourceFile {
                 if map.is_empty() {
                     None
                 } else {
-                    Some(SourceFile::DynamicSourceWithDefaultSystem(def, map))
+                    Some(SourceFile::DynamicSource {
+                        default_path,
+                        default_system,
+                        source_map: map,
+                    })
                 }
             }
         }
@@ -373,9 +353,10 @@ impl SourceFile {
             })
             .try_collect::<_, _, anyhow::Error>()?;
 
-        Ok(SourceFile::DynamicSourceWithDefaultSystem(
-            System(default),
-            new_map,
-        ))
+        Ok(SourceFile::DynamicSource {
+            default_path: None,
+            default_system: Some(System(default)),
+            source_map: new_map,
+        })
     }
 }

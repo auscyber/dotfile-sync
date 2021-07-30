@@ -71,10 +71,18 @@ You can create system dependent links to alleviate all your stress
 ```toml
 [[links]]
 ```
-with these attributes
+with these attributes  
+**These first three are required**
+
 * `name`: The user side name for the link
-* `src`:  The relative location of the actual file in the project
-* `destination`: The location for the `src` to be linked to
+* `src`:  The relative location of the actual file in the project  
+* `destination`: The location for the `src` to be linked to  
+
+**These are *not* required**
+* `system`: System to link on *can be null*
+* `default_path`: When `source_map` exists, the default path to link if the current `system` cannot be found in `source_map`
+* `default_system`: The same as above, however, the default system to search for in `source_map`
+* `source_map`: Map of systems to relative locations
 
 ## Usage <a name="usage"></a>
 #### Adding multiple files
