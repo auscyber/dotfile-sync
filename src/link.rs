@@ -1,5 +1,4 @@
 use crate::file_actions::check_path;
-use crate::goals::Goal;
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -61,7 +60,6 @@ pub struct Link {
     pub destination: VariablePath,
     #[serde(flatten)]
     pub src: SourceFile,
-    pub goals: Option<Vec<Goal>>,
 }
 
 impl Link {
@@ -70,7 +68,6 @@ impl Link {
             name,
             destination: src,
             src: destination,
-            goals: None,
         }
     }
 }

@@ -8,6 +8,7 @@ use std::convert::TryInto;
 
 mod actions;
 mod config;
+mod dependency;
 mod file_actions;
 mod goals;
 mod link;
@@ -54,6 +55,7 @@ impl TryInto<ProjectContext> for Args {
         let (path, proj_config) = get_project_config(
             self.project_path
                 .as_ref()
+                .or_else(|| Some(&PathBuf::from(".")))
                 .or_else(|| {
                     self.project
                         .clone()
