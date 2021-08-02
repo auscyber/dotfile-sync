@@ -22,7 +22,10 @@ pub async fn sync(ctx: ProjectContext) -> Result<()> {
                     let mut temp_dest = link
                         .destination
                         .to_path_buf(ctx.project.variables.as_ref())?;
-                    if temp_dest.is_dir() && temp_dest.exists() {
+                    if temp_dest.is_dir()
+                        && temp_dest.exists()
+                        && !same_file::is_same_file(&temp_dest, &source)?
+                    {
                         temp_dest.push(
                             source
                                 .file_name()
