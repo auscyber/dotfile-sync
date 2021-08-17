@@ -25,7 +25,12 @@ pub struct Args {
     config_file: Option<PathBuf>,
     #[structopt(long, global = true)]
     project_path: Option<PathBuf>,
-    #[structopt(long, short, about = "Locate project from system projects", global = true)]
+    #[structopt(
+        long,
+        short,
+        about = "Locate project from system projects",
+        global = true
+    )]
     project: Option<String>,
     #[structopt(long, short, global = true)]
     system: Option<System>,
@@ -45,9 +50,17 @@ impl TryInto<ProjectContext> for Args {
     type Error = anyhow::Error;
     fn try_into(self) -> Result<ProjectContext> {
         let (system_config_file, system_config) = get_sys_config(self.config_file.as_ref())?;
+        let current = std::env::current_dir()?;
         let (path, proj_config) = get_project_config(
             self.project_path
                 .as_ref()
+                .or_else(|| {
+                    if current.join(".links.toml").exists() {
+                        Some(&current)
+                    } else {
+                        None
+                    }
+                })
                 .or_else(|| {
                     self.project
                         .clone()
