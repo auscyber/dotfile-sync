@@ -3,6 +3,7 @@ use anyhow::*;
 use log::*;
 
 mod add;
+pub mod goal;
 mod prune;
 mod revert;
 mod sync;
