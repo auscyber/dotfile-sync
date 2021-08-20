@@ -1,5 +1,6 @@
 use crate::goals::Goal;
 use crate::link::{Link, System};
+use crate::packages::ProgramConfig;
 use crate::util::WritableConfig;
 use anyhow::{bail, Context, Result};
 use directories::ProjectDirs;
@@ -17,9 +18,10 @@ pub struct ProjectConfig {
     pub id: String,
     pub default: Option<System>,
     pub systems: Vec<System>,
-    pub links: Vec<Link>,
     pub variables: Option<HashMap<String, String>>,
-    pub goals: Option<Vec<Goal>>,
+    pub goals: Option<HashMap<String, Goal>>,
+    pub programs: Option<Vec<ProgramConfig>>,
+    pub links: Vec<Link>,
 }
 
 impl ProjectConfig {
@@ -40,7 +42,11 @@ impl ProjectConfig {
             links: Vec::new(),
             variables: None,
             goals: None,
+            programs: None,
         }
+    }
+    pub fn save(&self, ctx: &crate::ProjectContext) -> Result<()> {
+        self.write_to_file(&ctx.project_config_path.join(".links.toml"))
     }
 }
 

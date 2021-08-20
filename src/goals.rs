@@ -1,68 +1,83 @@
-use crate::link::{Link, VariablePath};
+use crate::{link::Link, ProjectContext};
 use anyhow::{Context, Result};
 use itertools::Itertools;
-use petgraph::graph::DiGraph;
 use serde::{Deserialize, Serialize};
 
 use std::collections::HashMap;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Goal {
     pub enabled: bool,
-    pub name: String,
     pub links: Vec<String>,
     pub required_goals: Option<Vec<String>>,
 }
 
 impl Goal {
-    pub fn to_assoc(&self, all_goals: &HashMap<String, &Goal>) -> Result<Vec<(String, String)>> {
-        match self.required_goals {
-            Some(ref goals) => Ok(goals
-                .iter()
-                .map(|goal_name| {
-                    let goal = all_goals.get(goal_name).context(format!(
-                        r#"Could not find goal by the name of "{}" "#,
-                        goal_name
-                    ))?;
-                    let mut result = goal.to_assoc(&all_goals)?;
-                    result.push((self.name.clone(), goal_name.clone()));
-                    Ok(result)
-                })
-                .try_collect::<_, Vec<_>, anyhow::Error>()?
-                .concat()),
-            None => Ok(Vec::new()),
+    pub fn new(required_goals: Vec<String>) -> Goal {
+        Goal {
+            enabled: true,
+            links: Vec::new(),
+            required_goals: if required_goals.is_empty() {
+                None
+            } else {
+                Some(required_goals)
+            },
         }
     }
-
-    pub fn to_deps(&self, goal_list: Vec<Goal>) -> Result<Vec<Goal>> {
-        let goals = match self.required_goals {
-            Some(ref x) => x,
-            None => return Ok(Default::default()),
-        };
-        if goals.contains(&self.name) {
-            return Err(anyhow::Error::msg("Goal contains itself"));
-        }
-        let goal_list_iter = goal_list.iter().map(|x| (x.name.clone(), x)).collect();
-
-        let mut graph = DiGraph::<&str, ()>::new();
-        let assoc = self.to_assoc(&goal_list_iter)?;
-        let used_goals = assoc
-            .iter()
-            .dedup_by(|a, b| a.0 == b.0)
-            .map(|x| (x.0.as_str(), graph.add_node(x.0.as_str())))
-            .collect::<HashMap<_, petgraph::graph::NodeIndex<_>>>();
-        graph.extend_with_edges(assoc.iter().filter_map(|(a, b)| {
-            Some((
-                used_goals.get(a.as_str())?.clone(),
-                used_goals.get(b.as_str())?.clone(),
-            ))
-        }));
-        println!("{:?}", petgraph::dot::Dot::new(&graph));
-        todo!();
+    pub fn get_links(&self, ctx: &ProjectContext) -> Result<Vec<Link>> {
+        let all_goals = ctx
+            .project
+            .goals
+            .clone()
+            .context("No goals set for project")?;
+        let hash_map = ctx
+            .project
+            .links
+            .clone()
+            .into_iter()
+            .map(|x| (x.name.clone(), x))
+            .collect();
+        Ok(self
+            .to_links(&hash_map, &all_goals)?
+            .into_iter()
+            .cloned()
+            .collect())
     }
+    pub fn to_links<'a>(
+        &self,
+        all_links: &'a HashMap<String, Link>,
+        all_goals: &'a HashMap<String, Goal>,
+    ) -> Result<Vec<&'a Link>> {
+        let mut links = self.links.clone();
+        if let Some(ref x) = self.required_goals {
+            links.extend(
+                x.iter()
+                    .map(|x| {
+                        Ok(all_goals
+                            .get(x)
+                            .context(format!("Could not find {}", x))?
+                            .links
+                            .clone())
+                    })
+                    .try_collect::<_, Vec<_>, anyhow::Error>()?
+                    .concat(),
+            );
+        }
+        links
+            .into_iter()
+            .dedup()
+            .map(|x| all_links.get(&x).context(format!("Could not find {}", &x)))
+            .try_collect::<_, Vec<_>, _>()
+    }
+}
 
-    fn get_links(&self, ctx: &crate::ProjectContext) -> Result<Vec<Link>> {
-        let project = &ctx.project;
-        todo!();
+impl std::fmt::Display for Goal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Enabled: {}", self.enabled)?;
+        writeln!(f, "  Links: ")?;
+        for link in &self.links {
+            writeln!(f, "{}", link)?;
+        }
+        Ok(())
     }
 }

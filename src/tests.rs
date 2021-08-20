@@ -22,3 +22,35 @@ mod parse_vars {
         );
     }
 }
+
+//mod goals {
+//    use crate::goals::Goal;
+//
+//    #[test]
+//    fn goal_test() {
+//        let mut map = std::collections::HashMap::new();
+//        macro_rules! goal {
+//        ($name:expr) => {
+//               map.insert($name,Goal {
+//                enabled: true,
+//                links: Vec::new(),
+//                required_goals: None,
+//            });
+//
+//        };
+//        ($name:expr ,  $($depends:expr),*) => {
+//            map.insert($name,Goal {
+//                enabled: true,
+//                links: Vec::new(),
+//                required_goals: Some(vec![ $($depends.into(),)*]),
+//            });
+//        };
+//    }
+//
+//        goal!("hi", "lol");
+//        goal!("lol", "bob", "jim");
+//        goal!("jim");
+//        goal!("bob");
+//        println!()
+//    }
+//}

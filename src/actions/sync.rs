@@ -1,15 +1,69 @@
-use crate::ProjectContext;
+use crate::{link::Link, ProjectContext};
 use anyhow::{Context, Result};
 use futures::future::join_all;
 use log::*;
 use std::sync::Arc;
 use tokio::fs;
 
-pub async fn sync(ctx: ProjectContext) -> Result<()> {
+pub async fn sync(
+    ctx: ProjectContext,
+    goal: Option<String>,
+    installed_programs: bool,
+) -> Result<()> {
+    let links = match goal {
+        Some(goal) => {
+            let all_goals = ctx
+                .project
+                .goals
+                .clone()
+                .context("No goals set for project")?;
+            let hash_map = ctx
+                .project
+                .links
+                .clone()
+                .into_iter()
+                .map(|x| (x.name.clone(), x))
+                .collect();
+            all_goals
+                .get(&goal)
+                .context("Could not find goal")?
+                .to_links(&hash_map, &all_goals)?
+                .into_iter()
+                .cloned()
+                .collect()
+        }
+        None => {
+            if installed_programs {
+                let packages = ctx
+                    .project
+                    .programs
+                    .as_ref()
+                    .context("Could not find any packages")?;
+                packages
+                    .iter()
+                    .map(|x| {
+                        if x.package_installed()? {
+                            x.get_goal(&ctx)
+                        } else {
+                            Ok(vec![])
+                        }
+                    })
+                    .collect::<Result<Vec<_>, anyhow::Error>>()?
+                    .concat()
+            } else {
+                ctx.project.links.clone()
+            }
+        }
+    };
+
+    link_links(ctx, links).await
+}
+
+pub async fn link_links(ctx: ProjectContext, links: Vec<Link>) -> Result<()> {
     let ctx = Arc::new(ctx);
-    let threads = ctx.project.links.clone().into_iter().map(|link| {
+    let threads = links.into_iter().map(|link| {
         let ctx = ctx.clone();
-        //Creat async threads
+        //Create async threads to link
         tokio::spawn(async move {
             async {
                 let project_path = &ctx.project_config_path;
@@ -18,7 +72,10 @@ pub async fn sync(ctx: ProjectContext) -> Result<()> {
                     None => return Ok(()),
                 };
                 debug!("project_path is {}", project_path.display());
+
+                //Normalise destination
                 let destination = {
+                    //Parse in environment variables
                     let mut temp_dest = link
                         .destination
                         .to_path_buf(ctx.project.variables.as_ref())?;
@@ -29,6 +86,8 @@ pub async fn sync(ctx: ProjectContext) -> Result<()> {
                                 .context(format!("Could not get file name for {}", link.name))?,
                         );
                     }
+                    //If the destination exists, and links back to the original location, then already
+                    //linked
                     if temp_dest.exists() && same_file::is_same_file(&temp_dest, &source)? {
                         info!(r#""{}" already linked"#, source.display());
                         return Ok(());

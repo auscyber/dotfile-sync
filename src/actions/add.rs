@@ -79,33 +79,48 @@ async fn add_individual_link(
             .context("Could not get file name")?,
     };
 
-    if ctx
-        .project_config_path
-        .join(&output_dest)
-        .canonicalize()
-        .map(|x| x.exists())
-        .unwrap_or(false)
-        || ctx
+    anyhow::ensure!(
+        !(ctx
             .project
             .links
             .iter()
-            .any(|x| x.src.contains_path(&output_dest))
-    {
-        debug!(
-            "path {}",
-            ctx.project_config_path
+            .filter_map(|x| same_file::is_same_file(
+                &original_location_cleaned,
+                &x.destination
+                    .to_path_buf(ctx.project.variables.as_ref())
+                    .ok()?
+            )
+            .ok())
+            .any(|x| x)
+            || ctx
+                .project_config_path
                 .join(&output_dest)
-                .canonicalize()?
-                .display()
-        );
-        bail!("Destination {} already exists", original_location);
-    }
+                .canonicalize()
+                .map(|x| {
+                    println!("{}", x.display());
+                    x.exists()
+                })
+                .unwrap_or(false)
+            || ctx
+                .project
+                .links
+                .iter()
+                .any(|x| x.src.contains_path(&output_dest))),
+        "Destination {} already exists",
+        original_location
+    );
+
     let name = name.unwrap_or(
         original_location_cleaned
             .file_name()
             .map(|x| x.to_string_lossy().into())
             .context("Could not get file name")?,
     );
+    anyhow::ensure!(
+        !ctx.project.links.iter().any(|x| x.name == name),
+        "links already contain link of that name"
+    );
+
     let get_system = || ctx.args.system.to_owned().context("could not get system");
     let mut found = false;
     let mut completed_links = ctx
@@ -182,9 +197,12 @@ async fn manage_list(
                 .context("Could not get file name")?
                 .into();
             let dest_file = format!("{}/{}", dest, file_name);
-            if ctx.project_config_path.join(&dest_file).exists() {
-                bail!("file {} already exists", dest_file);
-            }
+            anyhow::ensure!(
+                ctx.project_config_path.join(&dest_file).exists(),
+                "file {} already exists",
+                dest_file
+            );
+
             Ok((false, cleaned, dest_file, variable_path, file_name))
         })
         .try_collect()?;

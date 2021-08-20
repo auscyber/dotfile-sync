@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use log::*;
-use std::{env, path::PathBuf};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 use structopt::StructOpt;
 
 use colored::*;
@@ -8,16 +11,16 @@ use std::convert::TryInto;
 
 mod actions;
 mod config;
-mod dependency;
 mod file_actions;
 mod goals;
 mod link;
+mod packages;
 #[cfg(test)]
 mod tests;
 mod util;
 
 use config::*;
-use link::System;
+use link::{Link, System};
 use util::WritableConfig;
 
 #[derive(StructOpt, Clone)]
@@ -25,7 +28,7 @@ use util::WritableConfig;
 pub struct Args {
     #[structopt(short, long, about = "Location of system config file", global = true)]
     config_file: Option<PathBuf>,
-    #[structopt(long, global = true)]
+    #[structopt(long, global = true, about = "Location of project config file")]
     project_path: Option<PathBuf>,
     #[structopt(
         long,
@@ -48,14 +51,42 @@ pub struct ProjectContext {
     pub system_config_path: PathBuf,
     pub system: Option<System>,
 }
+
+impl ProjectContext {
+    pub fn get_link_for_file<'a>(&'a mut self, file: &Path) -> Option<&'a mut Link> {
+        let stripped_path = file.to_str()?;
+        self.project
+            .links
+            .iter_mut()
+            .find(|x| x.src.contains_path(stripped_path))
+    }
+
+    pub fn in_project(&self, path: &str) -> Result<bool> {
+        Ok(self
+            .project_config_path
+            .join(path)
+            .canonicalize()
+            .map(|x| x.exists())
+            .unwrap_or(false)
+            || self.project.links.iter().any(|x| x.src.contains_path(path)))
+    }
+}
+
 impl TryInto<ProjectContext> for Args {
     type Error = anyhow::Error;
     fn try_into(self) -> Result<ProjectContext> {
         let (system_config_file, system_config) = get_sys_config(self.config_file.as_ref())?;
+        let current = std::env::current_dir()?;
         let (path, proj_config) = get_project_config(
             self.project_path
                 .as_ref()
-                .or_else(|| Some(&PathBuf::from(".")))
+                .or_else(|| {
+                    if current.join(".links.toml").exists() {
+                        Some(&current)
+                    } else {
+                        None
+                    }
+                })
                 .or_else(|| {
                     self.project
                         .clone()
@@ -88,13 +119,6 @@ impl TryInto<ProjectContext> for Args {
     }
 }
 
-impl ProjectContext {
-    //    pub fn write_to_file(&self, config: ProjectConfig) -> Result<()> {
-    //        let new_toml = toml::to_vec(&final_project_config)?;
-    //        fs::write(ctx.project_config_path.join(".links.toml"), new_toml).await?;
-    //    }
-}
-
 impl Args {
     fn try_to_context(self) -> Result<ProjectContext> {
         self.try_into()
@@ -104,7 +128,12 @@ impl Args {
 #[derive(StructOpt, Clone)]
 enum Command {
     #[structopt(about = "Link all files in project")]
-    Sync,
+    Sync {
+        #[structopt(short = "g", conflicts_with("installed_programs"))]
+        goal: Option<String>,
+        #[structopt(long = "installed-programs")]
+        installed_programs: bool,
+    },
     #[structopt(about = "Move and link project")]
     Add {
         src: Vec<String>,
@@ -124,6 +153,8 @@ enum Command {
     },
     #[structopt(about = "Prune all removed files in the project")]
     Prune,
+    #[structopt(about = "Work with Goals")]
+    Goals(actions::goal::GoalSubCommand),
     #[structopt(about = "List all links in the project")]
     List,
 }
@@ -134,8 +165,11 @@ pub async fn main() -> Result<()> {
     let args = Args::from_args();
     let command = args.command.clone();
     match command {
-        Command::Sync => {
-            actions::sync(args.try_into()?).await?;
+        Command::Sync {
+            goal,
+            installed_programs,
+        } => {
+            actions::sync(args.try_into()?, goal, installed_programs).await?;
         }
         Command::Manage { default } => {
             let ctx = args.try_to_context()?;
@@ -155,7 +189,7 @@ pub async fn main() -> Result<()> {
             let config = actions::add(&ctx, src, destination, name)
                 .await
                 .context("Failure adding link")?;
-            config.write_to_file(&ctx.project_config_path.join(".links.toml"))?;
+            config.save(&ctx)?;
         }
         Command::Init { name } => {
             let dir = env::current_dir()?;
@@ -180,11 +214,16 @@ pub async fn main() -> Result<()> {
         Command::Revert { file } => {
             let ctx = args.try_to_context()?;
             let config = actions::revert(&ctx, &file).await?;
-            config.write_to_file(&ctx.project_config_path.join(".links.toml"))?;
+            config.save(&ctx)?;
         }
         Command::Prune => {
             let ctx = args.try_to_context()?;
-            actions::prune(&ctx)?.write_to_file(&ctx.project_config_path.join(".links.toml"))?;
+            actions::prune(&ctx)?.save(&ctx)?;
+        }
+        Command::Goals(command) => {
+            let ctx = args.try_to_context()?;
+            let config = actions::goal::goals(&ctx, command).await?;
+            config.save(&ctx)?;
         }
     };
     Ok(())
