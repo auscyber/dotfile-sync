@@ -47,25 +47,24 @@ impl ProgramConfig {
         }
     }
     pub fn package_installed(&self) -> Result<bool> {
-        match self.checker_script {
-            Some(ref script) => {
-                let result = std::process::Command::new("sh")
-                    .args(["-c", script])
-                    .spawn()?
-                    .wait()?;
-                Ok(result.success())
-            }
-            None => Ok(env::var("PATH")
-                .context("Could not get PATH variable")?
-                .split(';')
-                .any(|x| {
-                    x == self.app_name
-                        || self
-                            .app_aliases
-                            .as_ref()
-                            .and_then(|aliases| aliases.iter().find(|y| x == *y))
-                            .is_some()
-                })),
-        }
+        Ok(if let Some(ref script) = self.checker_script {
+            let result = std::process::Command::new("sh")
+                .args(["-c", script])
+                .spawn()?
+                .wait()?;
+            result.success()
+        } else {
+            false
+        } || env::var("PATH")
+            .context("Could not get PATH variable")?
+            .split(';')
+            .any(|x| {
+                x == self.app_name
+                    || self
+                        .app_aliases
+                        .as_ref()
+                        .and_then(|aliases| aliases.iter().find(|y| x == *y))
+                        .is_some()
+            }))
     }
 }

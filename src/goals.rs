@@ -76,7 +76,7 @@ impl std::fmt::Display for Goal {
         writeln!(f, "Enabled: {}", self.enabled)?;
         writeln!(f, "  Links: ")?;
         for link in &self.links {
-            writeln!(f, "{}", link)?;
+            writeln!(f, "   {}", link)?;
         }
         Ok(())
     }
