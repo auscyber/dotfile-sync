@@ -93,12 +93,6 @@ impl TryInto<ProjectContext> for Args {
     }
 }
 
-impl ProjectContext {
-    //    pub fn write_to_file(&self, config: ProjectConfig) -> Result<()> {
-    //        let new_toml = toml::to_vec(&final_project_config)?;
-    //        fs::write(ctx.project_config_path.join(".links.toml"), new_toml).await?;
-    //    }
-}
 
 impl Args {
     fn try_to_context(self) -> Result<ProjectContext> {
