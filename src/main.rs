@@ -1,3 +1,4 @@
+#![feature(result_flattening)]
 use anyhow::{Context, Result};
 use log::*;
 use std::{
@@ -118,7 +119,6 @@ impl TryInto<ProjectContext> for Args {
         })
     }
 }
-
 
 impl Args {
     fn try_to_context(self) -> Result<ProjectContext> {

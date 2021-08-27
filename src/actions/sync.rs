@@ -70,8 +70,8 @@ pub async fn link_links(ctx: ProjectContext, links: Vec<Link>) -> Result<()> {
                 let source = match link.src.resolve(&ctx.system) {
                     Some(d) => project_path.join(d),
                     None => return Ok(()),
-                };
-                debug!("project_path is {}", project_path.display());
+                }
+                .canonicalize()?;
 
                 //Normalise destination
                 let destination = {
@@ -118,10 +118,11 @@ pub async fn link_links(ctx: ProjectContext, links: Vec<Link>) -> Result<()> {
             .context(format!("Failed linking {}", &link.name))
         })
     });
-    join_all(threads)
-        .await
-        .into_iter()
-        .map(|x| x?)
-        .collect::<Result<Vec<_>>>()?;
+
+    for res in join_all(threads).await {
+        if let Err(e) = res.map_err(Into::into).flatten() {
+            log::error!("Error syncing : {}", e)
+        }
+    }
     Ok(())
 }
