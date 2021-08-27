@@ -1,6 +1,5 @@
 use crate::{link::Link, ProjectContext};
 use anyhow::{Context, Result};
-use futures::future::join_all;
 use log::*;
 use std::sync::Arc;
 use tokio::fs;
@@ -119,8 +118,8 @@ pub async fn link_links(ctx: ProjectContext, links: Vec<Link>) -> Result<()> {
         })
     });
 
-    for res in join_all(threads).await {
-        if let Err(e) = res.map_err(Into::into).flatten() {
+    for res in threads {
+        if let Err(e) = res.await.map_err(Into::into).flatten() {
             log::error!("Error syncing : {}", e)
         }
     }
