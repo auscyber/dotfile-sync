@@ -1,7 +1,6 @@
 use crate::{goals::Goal, link::Link};
 use anyhow::{Context, Result};
-use std::env;
-
+use std::env; use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -59,12 +58,26 @@ impl ProgramConfig {
             .context("Could not get PATH variable")?
             .split(';')
             .any(|x| {
-                x == self.app_name
-                    || self
-                        .app_aliases
-                        .as_ref()
-                        .and_then(|aliases| aliases.iter().find(|y| x == *y))
-                        .is_some()
+                let path = PathBuf::from(x);
+                match path.read_dir() {
+                    Ok(mut dir) => dir
+                        .find_map(|x| {
+                            let file_name = x.ok()?.file_name();
+                            let file_name = file_name.to_str()?;
+                            Some(
+                                file_name == self.app_name
+                                    || self
+                                        .app_aliases
+                                        .as_ref()
+                                        .and_then(|aliases| {
+                                            aliases.iter().find(|y| file_name == *y)
+                                        })
+                                        .is_some(),
+                            )
+                        })
+                        .is_some(),
+                    _ => false,
+                }
             }))
     }
 }
