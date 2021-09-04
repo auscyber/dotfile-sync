@@ -1,12 +1,14 @@
 #![feature(result_flattening)]
 use anyhow::{Context, Result};
+use clap_generate::{generate, generators::*};
 use log::*;
 use std::{
     env,
     path::{Path, PathBuf},
 };
-use structopt::StructOpt;
+//use structopt::StructOpt;
 
+use clap::{ArgEnum, Clap, IntoApp};
 use colored::*;
 use std::convert::TryInto;
 
@@ -24,24 +26,46 @@ use config::*;
 use link::{Link, System};
 use util::WritableConfig;
 
-#[derive(StructOpt, Clone)]
-#[structopt(about = "Manage dotfiles")]
+#[derive(Clap, Clone)]
+#[clap(about = "Manage dotfiles")]
 pub struct Args {
-    #[structopt(short, long, about = "Location of system config file", global = true)]
+    #[clap(short, long, about = "Location of system config file", global = true)]
     config_file: Option<PathBuf>,
-    #[structopt(long, global = true, about = "Location of project config file")]
+    #[clap(long, global = true, about = "Location of project config file")]
     project_path: Option<PathBuf>,
-    #[structopt(
+    #[clap(
         long,
         short,
         about = "Locate project from system projects",
         global = true
     )]
     project: Option<String>,
-    #[structopt(long, short, global = true)]
+    #[clap(long, short, global = true)]
     system: Option<System>,
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     command: Command,
+}
+#[derive(Clap, Copy, Clone, ArgEnum)]
+pub enum Shell {
+    Bash,
+    Zsh,
+    Fish,
+    PowerShell,
+    Elvish,
+}
+
+impl Shell {
+    fn generate(&self) {
+        let mut app = Args::into_app();
+        let mut fd = std::io::stdout();
+        match self {
+            Shell::Bash => generate::<Bash, _>(&mut app, "dots", &mut fd),
+            Shell::Zsh => generate::<Zsh, _>(&mut app, "dots", &mut fd),
+            Shell::Fish => generate::<Fish, _>(&mut app, "dots", &mut fd),
+            Shell::PowerShell => generate::<PowerShell, _>(&mut app, "dots", &mut fd),
+            Shell::Elvish => generate::<Elvish, _>(&mut app, "dots", &mut fd),
+        }
+    }
 }
 
 pub struct ProjectContext {
@@ -126,46 +150,54 @@ impl Args {
     }
 }
 
-#[derive(StructOpt, Clone)]
+#[derive(Clap, Clone)]
 enum Command {
-    #[structopt(about = "Link all files in project")]
+    #[clap(about = "Link all files in project")]
     Sync {
-        #[structopt(short = "g", conflicts_with("installed_programs"))]
+        #[clap(short = 'g', conflicts_with("installed_programs"))]
         goal: Option<String>,
-        #[structopt(long = "installed-programs")]
+        #[clap(long = "installed-programs")]
         installed_programs: bool,
     },
-    #[structopt(about = "Move and link project")]
+    #[clap(about = "Move and link project")]
     Add {
         src: Vec<String>,
-        #[structopt(short, long)]
+        #[clap(short, long)]
         destination: Option<String>,
-        #[structopt(short, long)]
+        #[clap(short, long)]
         name: Option<String>,
     },
-    #[structopt(about = "Initalise project")]
+    #[clap(about = "Initalise project")]
     Init { name: Option<String> },
-    #[structopt(about = "Revert path")]
+    #[clap(about = "Revert path")]
     Revert { file: PathBuf },
-    #[structopt(about = "Add project to system configuration")]
+    #[clap(about = "Add project to system configuration")]
     Manage {
-        #[structopt(short, long)]
+        #[clap(short, long)]
         default: bool,
     },
-    #[structopt(about = "Prune all removed files in the project")]
+    #[clap(about = "Prune all removed files in the project")]
     Prune,
-    #[structopt(about = "Work with Goals")]
+    #[clap(about = "Work with Goals", subcommand)]
     Goals(actions::goal::GoalSubCommand),
-    #[structopt(about = "List all links in the project")]
+    Completion {
+        #[clap(long, short, value_name = "SHELL", arg_enum)]
+        shell: Shell,
+    },
+    #[clap(about = "List all links in the project")]
     List,
 }
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-    let args = Args::from_args();
+    let args = Args::parse();
     let command = args.command.clone();
     match command {
+        Command::Completion { shell } => {
+            shell.generate();
+        }
+
         Command::Sync {
             goal,
             installed_programs,

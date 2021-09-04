@@ -85,6 +85,10 @@ impl std::fmt::Display for Link {
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
+#[serde(transparent)]
+pub struct SourceFileUrl(String);
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone)]
 #[serde(untagged)]
 pub enum SourceFile {
     Source {

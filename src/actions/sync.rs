@@ -94,7 +94,7 @@ pub async fn link_links(ctx: ProjectContext, links: Vec<Link>) -> Result<()> {
                         info!(r#""{}" already linked"#, source.display());
                         return Ok(());
                     } else if temp_dest.exists() {
-                        error!("{} file already exists", source.display());
+                        error!("{} file already exists", temp_dest.display());
                         return Ok(());
                     }
                     temp_dest

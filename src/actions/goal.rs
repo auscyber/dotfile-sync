@@ -1,12 +1,12 @@
 use crate::goals::Goal;
 use crate::ProjectContext;
 use anyhow::{Context, Result};
-use structopt::StructOpt;
+use clap::Clap;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-#[derive(StructOpt, Clone)]
+#[derive(Clap, Clone)]
 pub enum GoalSubCommand {
     List,
     Add { name: String, depends: Vec<String> },
