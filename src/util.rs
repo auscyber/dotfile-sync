@@ -86,3 +86,16 @@ impl<T: Sync + DeserializeOwned + Send + Serialize + Clone> WritableConfig for T
         Ok(val)
     }
 }
+
+use std::ffi::OsStr;
+use std::process::Stdio;
+use tokio::process::Command;
+pub fn elevate<I, S>(sudo_program: &str, args: I) -> Command
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut command = Command::new(sudo_program);
+    command.args(args).stdin(Stdio::inherit());
+    command
+}

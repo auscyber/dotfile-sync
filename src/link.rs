@@ -60,6 +60,7 @@ pub struct Link {
     pub destination: VariablePath,
     #[serde(flatten)]
     pub src: SourceFile,
+    pub sudo_required: Option<bool>,
 }
 
 impl Link {
@@ -68,6 +69,7 @@ impl Link {
             name,
             destination: src,
             src: destination,
+            sudo_required: None,
         }
     }
 }

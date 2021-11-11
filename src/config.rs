@@ -113,6 +113,7 @@ pub struct ProjectOutput {
 pub struct SystemConfig {
     pub default: Option<PathBuf>,
     pub projects: HashMap<String, ProjectOutput>,
+    pub sudo_program: Option<String>,
 }
 
 impl Default for SystemConfig {
@@ -125,6 +126,7 @@ impl SystemConfig {
         SystemConfig {
             default: None,
             projects: HashMap::new(),
+            sudo_program: None,
         }
     }
 

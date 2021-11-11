@@ -99,18 +99,52 @@ pub async fn link_links(ctx: ProjectContext, links: Vec<Link>) -> Result<()> {
                     }
                     temp_dest
                 };
-                fs::create_dir_all(
-                    &destination
-                        .parent()
-                        .context("Could not get parent folder")?,
-                )
-                .await
-                .context(format!(
-                    "Failed creating folder hierchy for {}",
-                    &destination.display()
-                ))?;
+                if link.sudo_required.unwrap_or(false) {
+                    let sudo_program = ctx.system_config.sudo_program.as_deref().unwrap_or("sudo");
+                    crate::util::elevate(
+                        sudo_program,
+                        &[
+                            "mkdir",
+                            "-p",
+                            destination
+                                .parent()
+                                .and_then(|x| x.to_str())
+                                .context("Could not get parent folder")?,
+                        ],
+                    )
+                    .spawn()?
+                    .wait()
+                    .await?;
+                    crate::util::elevate(
+                        sudo_program,
+                        &[
+                            "ln",
+                            "-s",
+                            source
+                                .to_str()
+                                .context("Could not convert source to string")?,
+                            destination
+                                .to_str()
+                                .context("Could not convert destination to string")?,
+                        ],
+                    )
+                    .spawn()?
+                    .wait()
+                    .await?;
+                } else {
+                    fs::create_dir_all(
+                        &destination
+                            .parent()
+                            .context("Could not get parent folder")?,
+                    )
+                    .await
+                    .context(format!(
+                        "Failed creating folder hierchy for {}",
+                        &destination.display()
+                    ))?;
 
-                fs::symlink(source, destination).await?;
+                    fs::symlink(source, destination).await?;
+                }
                 Ok::<_, anyhow::Error>(())
             }
             .await

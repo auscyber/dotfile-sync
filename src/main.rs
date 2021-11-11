@@ -1,6 +1,6 @@
 #![feature(result_flattening)]
 use anyhow::{Context, Result};
-use clap_generate::{generate, generators::*};
+use clap_generate::{generate, Shell};
 use log::*;
 use std::{
     env,
@@ -8,7 +8,7 @@ use std::{
 };
 //use structopt::StructOpt;
 
-use clap::{ArgEnum, Clap, IntoApp};
+use clap::{IntoApp, Parser};
 use colored::*;
 use std::convert::TryInto;
 
@@ -26,7 +26,7 @@ use config::*;
 use link::{Link, System};
 use util::WritableConfig;
 
-#[derive(Clap, Clone)]
+#[derive(Parser, Clone)]
 #[clap(about = "Manage dotfiles")]
 pub struct Args {
     #[clap(short, long, about = "Location of system config file", global = true)]
@@ -44,28 +44,6 @@ pub struct Args {
     system: Option<System>,
     #[clap(subcommand)]
     command: Command,
-}
-#[derive(Clap, Copy, Clone, ArgEnum)]
-pub enum Shell {
-    Bash,
-    Zsh,
-    Fish,
-    PowerShell,
-    Elvish,
-}
-
-impl Shell {
-    fn generate(&self) {
-        let mut app = Args::into_app();
-        let mut fd = std::io::stdout();
-        match self {
-            Shell::Bash => generate::<Bash, _>(&mut app, "dots", &mut fd),
-            Shell::Zsh => generate::<Zsh, _>(&mut app, "dots", &mut fd),
-            Shell::Fish => generate::<Fish, _>(&mut app, "dots", &mut fd),
-            Shell::PowerShell => generate::<PowerShell, _>(&mut app, "dots", &mut fd),
-            Shell::Elvish => generate::<Elvish, _>(&mut app, "dots", &mut fd),
-        }
-    }
 }
 
 pub struct ProjectContext {
@@ -150,14 +128,14 @@ impl Args {
     }
 }
 
-#[derive(Clap, Clone)]
+#[derive(Parser, Clone)]
 enum Command {
     #[clap(about = "Link all files in project")]
     Sync {
-        #[clap(short = 'g', conflicts_with("installed_programs"))]
+        #[clap(long = "installed_programs")]
+        installed_programs: Option<bool>,
+        #[clap(short = 'g')]
         goal: Option<String>,
-        #[clap(long = "installed-programs")]
-        installed_programs: bool,
     },
     #[clap(about = "Move and link project")]
     Add {
@@ -181,7 +159,7 @@ enum Command {
     #[clap(about = "Work with Goals", subcommand)]
     Goals(actions::goal::GoalSubCommand),
     Completion {
-        #[clap(long, short, value_name = "SHELL", arg_enum)]
+        #[clap(long, value_name = "SHELL", arg_enum)]
         shell: Shell,
     },
     #[clap(about = "List all links in the project")]
@@ -195,14 +173,18 @@ pub async fn main() -> Result<()> {
     let command = args.command.clone();
     match command {
         Command::Completion { shell } => {
-            shell.generate();
+            generate(shell, &mut Args::into_app(), "dots", &mut std::io::stdout())
         }
-
         Command::Sync {
             goal,
             installed_programs,
         } => {
-            actions::sync(args.try_into()?, goal, installed_programs).await?;
+            actions::sync(
+                args.try_into()?,
+                goal,
+                installed_programs.unwrap_or_default(),
+            )
+            .await?;
         }
         Command::Manage { default } => {
             let ctx = args.try_to_context()?;
