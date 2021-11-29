@@ -19,7 +19,7 @@ edition = "2021"
 futures = "0.3.17"
 tokio = { version = "1.11.0", features = ["full"] }
 # git2 = "0.13"
-anyhow = "1.0.44"
+anyhow = "1.0.50"
 toml = "0.5.8"
 serde = { version = "1.0", features = ["derive"] }
 directories = "4.0"
@@ -31,9 +31,9 @@ itertools = "0.10.0"
 cascade = "1.0.0"
 same-file = "1.0.6"
 colored = "2"
-derive_more = "0.99.16"
+derive_more = "0.99.17"
 async-trait = "0.1.51"
-futures-util = "0.3.17"
+futures-util = "0.3.18"
 clap_generate = { version = "3.0.0-beta.5", git = "https://github.com/clap-rs/clap", rev = "3a697af253b5fdeeda7078cd247555d0ea7e6e37" }
 clap = { version = "3.0.0-beta.5", git = "https://github.com/clap-rs/clap", rev = "3a697af253b5fdeeda7078cd247555d0ea7e6e37" }
 
