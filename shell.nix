@@ -7,8 +7,9 @@ mkShell {
     gcc
     rust-analyzer
     rustfmt
-#    clippy
-cargo-edit
+    lldb
+    #    clippy
+    cargo-edit
     clippy-preview
   ];
 
