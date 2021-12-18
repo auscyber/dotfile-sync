@@ -19,8 +19,12 @@ jobs:
         uses: actions/cache@v2
         with:
           path: |
-            target/**/build
-          key: ${{ runner.os }}-${{ hashFiles('Cargo.*') }}
+             ~/.cargo/bin/
+             ~/.cargo/registry/index/
+             ~/.cargo/registry/cache/
+             ~/.cargo/git/db/
+             target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - run: rustup component add clippy
       - run: cargo clippy -- -D warnings
 
@@ -35,7 +39,12 @@ jobs:
       uses: actions/cache@v2
       with:
         path: |
-          target/**build
-        key: ${{ runner.os }}-${{ hashFiles('Cargo.*') }}
+           ~/.cargo/bin/
+           ~/.cargo/registry/index/
+           ~/.cargo/registry/cache/
+           ~/.cargo/git/db/
+           target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
     - run: cargo test --verbose
 

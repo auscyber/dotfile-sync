@@ -27,8 +27,12 @@ jobs:
         uses: actions/cache@v2
         with:
           path: |
-            target/**/build
-          key: ${{ runner.os }}-${{ hashFiles('Cargo.*') }}
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock }}
       - run: cargo build --release
       - uses: actions/upload-artifact@v2
         with:
