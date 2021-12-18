@@ -1,4 +1,4 @@
-use anyhow::*;
+use anyhow::{Context, Result};
 use std::{collections::hash_map, env};
 
 #[derive(Debug)]
@@ -62,7 +62,7 @@ pub fn parse_vars(
         );
         extra_offset += variable_value.as_str().len() as i32 - offsets.as_str().len() as i32;
     }
-    Ok(output)
+    core::result::Result::Ok(output)
 }
 
 use serde::{de::DeserializeOwned, Serialize};
@@ -90,12 +90,12 @@ impl<T: Sync + DeserializeOwned + Send + Serialize + Clone> WritableConfig for T
 use std::ffi::OsStr;
 use std::process::Stdio;
 use tokio::process::Command;
-pub fn elevate<I, S>(sudo_program: &str, args: I) -> Command
+pub fn run_command<I, S>(program: &str, args: I) -> Command
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let mut command = Command::new(sudo_program);
+    let mut command = Command::new(program);
     command.args(args).stdin(Stdio::inherit());
     command
 }

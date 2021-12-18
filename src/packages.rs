@@ -1,7 +1,8 @@
 use crate::{goals::Goal, link::Link};
 use anyhow::{Context, Result};
-use std::env; use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::env;
+use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(untagged)]
@@ -45,12 +46,15 @@ impl ProgramConfig {
             GoalType::Link(link) => Ok(vec![link.clone()]),
         }
     }
-    pub fn package_installed(&self) -> Result<bool> {
+    pub async fn package_installed(&self) -> Result<bool> {
+        log::debug!("Checking {}", self.app_name);
         Ok(if let Some(ref script) = self.checker_script {
-            let result = std::process::Command::new("sh")
+            let result = tokio::process::Command::new("sh")
                 .args(["-c", script])
                 .spawn()?
-                .wait()?;
+                .wait()
+                .await?;
+            log::debug!("Pacman result: {:?}", result);
             result.success()
         } else {
             false

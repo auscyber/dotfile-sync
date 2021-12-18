@@ -1,7 +1,7 @@
 use crate::config::ProjectConfig;
 use crate::link::*;
 use crate::ProjectContext;
-use anyhow::*;
+use anyhow::Result;
 use log::*;
 use std::fs::remove_file;
 
