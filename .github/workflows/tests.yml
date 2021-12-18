@@ -10,19 +10,32 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-
-
   clippy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Cache Dependencies
+        id: cache-deps
+        uses: actions/cache@v2
+        with:
+          path: |
+            target/**/build
+          key: ${{ runner.os }}-${{ hashFiles('Cargo.*') }}
       - run: rustup component add clippy
       - run: cargo clippy -- -D warnings
+
 
   tests:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v2
+    - name: Cache Dependencies
+      id: cache-deps
+      uses: actions/cache@v2
+      with:
+        path: |
+          target/**build
+        key: ${{ runner.os }}-${{ hashFiles('Cargo.*') }}
     - run: cargo test --verbose
 
