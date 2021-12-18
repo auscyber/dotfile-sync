@@ -54,6 +54,13 @@ impl VariablePath {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Perms {
+    pub user_owner: Option<String>,
+    pub group_owner: Option<String>,
+    pub user_code: Option<String>,
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Link {
     pub name: String,
@@ -61,6 +68,8 @@ pub struct Link {
     #[serde(flatten)]
     pub src: SourceFile,
     pub sudo_required: Option<bool>,
+    #[serde(flatten)]
+    pub perms: Option<Perms>,
 }
 
 impl Link {
@@ -70,6 +79,7 @@ impl Link {
             destination: src,
             src: destination,
             sudo_required: None,
+            perms: None,
         }
     }
 }
