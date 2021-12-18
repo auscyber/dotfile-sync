@@ -33,6 +33,7 @@ jobs:
             ~/.cargo/git/db
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock }}
+      - run: rustup default nightly
       - run: cargo build --release
       - uses: actions/upload-artifact@v2
         with:
