@@ -1,4 +1,5 @@
 #![feature(result_flattening)]
+#![feature(in_band_lifetimes)]
 use anyhow::{Context, Result};
 use clap_generate::{generate, Shell};
 use log::*;
@@ -132,8 +133,8 @@ impl Args {
 enum Command {
     #[clap(about = "Link all files in project")]
     Sync {
-        #[clap(long = "installed_programs")]
-        installed_programs: Option<bool>,
+        #[clap(long = "installed-programs")]
+        installed_programs: bool,
         #[clap(short = 'g')]
         goal: Option<String>,
     },
@@ -170,8 +171,7 @@ enum Command {
 pub async fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let args = Args::parse();
-    let command = args.command.clone();
-    match command {
+    match args.command.clone() {
         Command::Completion { shell } => {
             generate(shell, &mut Args::into_app(), "dots", &mut std::io::stdout())
         }
@@ -179,12 +179,7 @@ pub async fn main() -> Result<()> {
             goal,
             installed_programs,
         } => {
-            actions::sync(
-                args.try_into()?,
-                goal,
-                installed_programs.unwrap_or_default(),
-            )
-            .await?;
+            actions::sync(args.try_into()?, goal, installed_programs).await?;
         }
         Command::Manage { default } => {
             let ctx = args.try_to_context()?;
