@@ -25,6 +25,7 @@ jobs:
              ~/.cargo/git/db/
              target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - run: rustup toolchain set nightly
       - run: rustup component add clippy
       - run: cargo clippy -- -D warnings
 
@@ -45,6 +46,6 @@ jobs:
            ~/.cargo/git/db/
            target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
+    - run: rustup toolchain set nightly
     - run: cargo test --verbose
 
