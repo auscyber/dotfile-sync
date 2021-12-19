@@ -1,19 +1,6 @@
-name: build
+name: release
 
-on:
-  push:
-    branches: [ master ]
-    paths:
-      - 'Cargo.toml'
-      - 'src/**.rs'
-      - 'Cargo.lock'
-
-  pull_request:
-    branches: [ master ]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'src/**.rs'
+on: workflow_dispatch
 
 
 
@@ -33,9 +20,22 @@ jobs:
             ~/.cargo/git/db
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock }}
+      - name: Check release version
+        id: version-check
+        uses: thebongy/version-check@v1
+        with:
+          file: Cargo.toml
+          tagFormat: v${version}
+
       - run: rustup default nightly
       - run: cargo build --release
       - uses: actions/upload-artifact@v2
         with:
-          name: binary
+          name: dots-binary
           path: target/release/dots
+      - name: Draft release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/release/dots
+          draft: true
+          tage_name: ${{ steps.version-check.outputs.releaseVersion}}
