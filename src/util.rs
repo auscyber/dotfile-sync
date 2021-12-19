@@ -62,7 +62,7 @@ pub fn parse_vars(
         );
         extra_offset += variable_value.as_str().len() as i32 - offsets.as_str().len() as i32;
     }
-    core::result::Result::Ok(output)
+    Ok(output)
 }
 
 use serde::{de::DeserializeOwned, Serialize};
