@@ -1,6 +1,6 @@
 [package]
 name = "dots"
-version = "0.3.5"
+version = "0.3.4"
 authors = ["AusCyber <willp@outlook.com.au>"]
 repository = "https://github.com/auscyberman/dotfile-sync"
 description = "a dotfile syncing software"
