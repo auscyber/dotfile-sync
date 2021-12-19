@@ -19,7 +19,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Check release version
         id: version-check
         uses: thebongy/version-check@v1
@@ -38,4 +38,4 @@ jobs:
         with:
           files: target/release/dots
           draft: true
-          tage_name: ${{ steps.version-check.outputs.releaseVersion}}
+          tage_name: ${{ steps.version-check.outputs.releaseVersion }}
