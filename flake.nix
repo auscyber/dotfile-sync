@@ -25,7 +25,11 @@
 
         dots = naersk-lib.buildPackage {
           pname = "dots";
-          nativeBuildInputs = with pkgs; [ pkg-config ];
+          doCheck = true;
+          cargoTestCommands = a: [
+          ''USER=test-user cargo $cargo_options test $cargo_test_options''
+          ''cargo clippy -- -D warnings''];
+          nativeBuildInputs = with pkgs; [ pkg-config clippy-preview rustc];
           root = ./.;
         };
 

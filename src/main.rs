@@ -97,7 +97,7 @@ impl TryInto<ProjectContext> for Args {
                         .and_then(|y| system_config.projects.get(&y))
                         .map(|x| &x.path)
                 })
-                .or_else(|| system_config.default.as_ref()),
+                .or(system_config.default.as_ref()),
         )?;
 
         let system = self
@@ -109,7 +109,7 @@ impl TryInto<ProjectContext> for Args {
                     .system
                     .as_ref()
             })
-            .or_else(|| proj_config.default.as_ref())
+            .or(proj_config.default.as_ref())
             .cloned();
         Ok(ProjectContext {
             //            command: self.command.clone(),

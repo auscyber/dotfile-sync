@@ -307,7 +307,7 @@ impl SourceFile {
             } => map
                 .get(system)
                 .or_else(|| map.get(default_system.as_ref()?))
-                .or_else(|| default_path.as_ref())
+                .or(default_path.as_ref())
                 .cloned(),
         }
     }
