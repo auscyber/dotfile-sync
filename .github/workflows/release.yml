@@ -38,4 +38,5 @@ jobs:
         with:
           files: target/release/dots
           draft: true
-          tage_name: ${{ steps.version-check.outputs.releaseVersion }}
+          tag_name: ${{ steps.version-check.outputs.releaseVersion }}
+          body_path: CHANGES.md
