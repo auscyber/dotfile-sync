@@ -18,8 +18,6 @@ edition = "2021"
 [dependencies]
 futures = "0.3.18"
 tokio = { version = "1.11.0", features = ["full"] }
-# git2 = "0.13"
-anyhow = "1.0.52"
 toml = "0.5.8"
 serde = { version = "1.0", features = ["derive"] }
 directories = "4.0"
@@ -36,6 +34,5 @@ async-trait = "0.1.51"
 futures-util = "0.3.18"
 clap_generate = { version = "3.0.0-beta.5", git = "https://github.com/clap-rs/clap", rev = "3a697af253b5fdeeda7078cd247555d0ea7e6e37" }
 clap = { version = "3.0.0-beta.5", git = "https://github.com/clap-rs/clap", rev = "3a697af253b5fdeeda7078cd247555d0ea7e6e37" }
-
-
-[patch.crates-io]
+thiserror = "1.0.38"
+snafu = "0.7.4"

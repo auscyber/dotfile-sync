@@ -1,10 +1,24 @@
 use crate::{config::ProjectConfig, file_actions::recurse_copy, link::*, ProjectContext};
-use anyhow::{bail, Context, Result};
 use cascade::cascade;
 use itertools::Itertools;
 use log::*;
+use snafu::Snafu;
 use std::path::{Path, PathBuf};
 use tokio::fs;
+
+#[derive(Snafu)] 
+enum AddError {
+    #[snafu(display("No files defined to link"))]
+    NoFiles,
+    #[snafu(display("Destination {} already exists",path))]
+    DestinationAlreadyExists {
+       path: VariablePath 
+    },
+    #[snafu(display("Links already contain link named {}",name))]
+    DuplicateLink {
+        name: String
+    }
+}
 
 pub async fn add(
     ctx: &ProjectContext,
@@ -13,9 +27,9 @@ pub async fn add(
     //Location of where to place it in the project
     destination: Option<String>,
     name: Option<String>,
-) -> Result<ProjectConfig> {
+) -> Result<ProjectConfig,AddError> {
     if original_locations.is_empty() {
-        bail!("No files defined to link");
+        return Err(AddError::NoFiles)
     }
     if original_locations.len() == 1 {
         add_individual_link(
@@ -35,7 +49,7 @@ async fn add_individual_link(
     mut original_location: String,
     destination: Option<String>,
     name: Option<String>,
-) -> Result<ProjectConfig> {
+) -> Result<ProjectConfig,AddError> {
     //Append current directory if it is a generic location
     let original_location = {
         let p = PathBuf::from(&original_location);
@@ -79,7 +93,7 @@ async fn add_individual_link(
             .context("Could not get file name")?,
     };
 
-    anyhow::ensure!(
+    snafu::ensure!(
         !(ctx
             .project
             .links
@@ -106,8 +120,7 @@ async fn add_individual_link(
                 .links
                 .iter()
                 .any(|x| x.src.contains_path(&output_dest))),
-        "Destination {} already exists",
-        original_location
+        DestinationAlreadyExistsSnafu{ path: original_location }
     );
 
     let name = name.unwrap_or(
@@ -116,9 +129,9 @@ async fn add_individual_link(
             .map(|x| x.to_string_lossy().into())
             .context("Could not get file name")?,
     );
-    anyhow::ensure!(
+    snafu::ensure!(
         !ctx.project.links.iter().any(|x| x.name == name),
-        "links already contain link of that name"
+        DuplicateLinkSnafu { name }
     );
 
     let get_system = || ctx.args.system.to_owned().context("could not get system");
@@ -143,7 +156,7 @@ async fn add_individual_link(
             link.src = link.src.insert_link(&sys, &output_dest)?;
             Ok(link)
         })
-        .collect::<Result<Vec<_>, anyhow::Error>>()?;
+        .collect::<Result<Vec<_>, AddError>>()?;
 
     if !found {
         let source = SourceFile::Source {
@@ -174,7 +187,7 @@ async fn manage_list(
     ctx: &ProjectContext,
     locations: Vec<String>,
     destination: Option<String>,
-) -> Result<ProjectConfig> {
+) -> Result<ProjectConfig,AddError> {
     let dest = destination.unwrap_or_else(|| String::from("."));
     fs::create_dir_all(ctx.project_config_path.join(&dest)).await?;
     let mut triples: Vec<_> = locations
@@ -197,10 +210,11 @@ async fn manage_list(
                 .context("Could not get file name")?
                 .into();
             let dest_file = format!("{}/{}", dest, file_name);
-            anyhow::ensure!(
+            snafu::ensure!(
                 ctx.project_config_path.join(&dest_file).exists(),
-                "file {} already exists",
-                dest_file
+                DestinationAlreadyExistsSnafu {
+                    path: dest_file
+                }
             );
 
             Ok((false, cleaned, dest_file, variable_path, file_name))
@@ -228,7 +242,7 @@ async fn manage_list(
             let sys = get_system()?;
             link.src = link.src.insert_link(&sys, dest_file)?;
 
-            Ok::<_, anyhow::Error>(link)
+            Ok::<_, AddError>(link)
         })
         .try_collect()?;
 
@@ -258,7 +272,7 @@ async fn manage_list(
     Ok(new_project)
 }
 
-async fn move_link(original_locaction_cleaned: &Path, output_dest: &Path) -> Result<()> {
+async fn move_link(original_locaction_cleaned: &Path, output_dest: &Path) -> Result<(),AddError> {
     if original_locaction_cleaned.is_dir() {
         recurse_copy(original_locaction_cleaned, output_dest).await?;
     } else {

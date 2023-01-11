@@ -1,8 +1,7 @@
 #![feature(result_flattening)]
-#![feature(in_band_lifetimes)]
-use anyhow::{Context, Result};
 use clap_generate::{generate, Shell};
 use log::*;
+use snafu::ResultExt;
 use std::{
     env,
     path::{Path, PathBuf},
@@ -15,6 +14,7 @@ use std::convert::TryInto;
 
 mod actions;
 mod config;
+mod error;
 mod file_actions;
 mod goals;
 mod link;
@@ -22,6 +22,8 @@ mod packages;
 #[cfg(test)]
 mod tests;
 mod util;
+
+use error::*;
 
 use config::*;
 use link::{Link, System};
@@ -79,7 +81,8 @@ impl ProjectContext {
 impl TryInto<ProjectContext> for Args {
     type Error = anyhow::Error;
     fn try_into(self) -> Result<ProjectContext> {
-        let (system_config_file, system_config) = get_sys_config(self.config_file.as_ref())?;
+        let (system_config_file, system_config) =
+            resolve_path_and_sys_conf(self.config_file.as_ref())?;
         let current = std::env::current_dir()?;
         let (path, proj_config) = get_project_config(
             self.project_path
@@ -124,7 +127,7 @@ impl TryInto<ProjectContext> for Args {
 }
 
 impl Args {
-    fn try_to_context(self) -> Result<ProjectContext> {
+    fn try_to_context(self) -> Result<ProjectContext,Error> {
         self.try_into()
     }
 }
@@ -168,7 +171,7 @@ enum Command {
 }
 
 #[tokio::main]
-pub async fn main() -> Result<()> {
+pub async fn main() -> Result<(), Error> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let args = Args::parse();
     match args.command.clone() {
@@ -183,10 +186,7 @@ pub async fn main() -> Result<()> {
         }
         Command::Manage { default } => {
             let ctx = args.try_to_context()?;
-            let config = actions::manage(&ctx, default).context(format!(
-                "Failure managing {}",
-                ctx.project_config_path.display()
-            ))?;
+            let config = actions::manage(&ctx, default).context(error::ManagementSnafu { config: ctx.project})?;
             config.write_to_file(&ctx.system_config_path)?;
             info!("Managed {}", ctx.project.name);
         }

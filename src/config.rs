@@ -1,8 +1,7 @@
 use crate::goals::Goal;
 use crate::link::{Link, System};
 use crate::packages::ProgramConfig;
-use crate::util::WritableConfig;
-use anyhow::{bail, Context, Result};
+use crate::util::{WritableConfig, WritableConfigError};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -21,6 +20,7 @@ pub struct ProjectConfig {
     pub variables: Option<HashMap<String, String>>,
     pub goals: Option<HashMap<String, Goal>>,
     pub programs: Option<Vec<ProgramConfig>>,
+    // TODO: Change to HashMap
     pub links: Vec<Link>,
 }
 
@@ -45,7 +45,7 @@ impl ProjectConfig {
             programs: None,
         }
     }
-    pub fn save(&self, ctx: &crate::ProjectContext) -> Result<()> {
+    pub fn save(&self, ctx: &crate::ProjectContext) -> Result<(),WritableConfigError> {
         self.write_to_file(&ctx.project_config_path.join(".links.toml"))
     }
 }
@@ -54,7 +54,9 @@ pub fn get_config_loc() -> Option<PathBuf> {
     ProjectDirs::from("com", "AusCyber", "dotfile-sync").map(|x| x.config_dir().to_path_buf())
 }
 
-pub fn get_sys_config(config_path: Option<impl AsRef<Path>>) -> Result<(PathBuf, SystemConfig)> {
+pub fn resolve_path_and_sys_conf(
+    config_path: Option<impl AsRef<Path>>,
+) -> Result<(PathBuf, SystemConfig)> {
     match config_path {
         Some(x) => Ok((
             x.as_ref().to_path_buf(),

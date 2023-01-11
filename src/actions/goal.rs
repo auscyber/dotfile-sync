@@ -1,10 +1,20 @@
 use crate::goals::Goal;
 use crate::ProjectContext;
-use anyhow::{Context, Result};
 use clap::Parser;
+use snafu::Snafu;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+
+#[derive(Snafu)]
+enum GoalError {
+    #[snafu(display("No goals for project"))]
+    NoGoals,
+    #[snafu(display("File {} not in project",path))]
+    NotInProject {
+        path: PathBuf
+    }
+}
 
 #[derive(Parser, Clone)]
 pub enum GoalSubCommand {
@@ -16,7 +26,7 @@ pub enum GoalSubCommand {
 pub async fn goals(
     ctx: &ProjectContext,
     command: GoalSubCommand,
-) -> Result<crate::config::ProjectConfig> {
+) -> Result<crate::config::ProjectConfig,GoalError> {
     let mut project_config = ctx.project.clone();
     use GoalSubCommand::*;
     match command {
@@ -27,11 +37,11 @@ pub async fn goals(
                     print!("Name: {} \n {}", name, goal);
                 }
             }
-            None => anyhow::bail!("No goals for project"),
+            None => return Err(GoalError::NoGoals),
         },
         AddFile { goal, files } => {
             for file in files {
-                anyhow::ensure!(
+                snafu::ensure!(
                     ctx.in_project(
                         &crate::config::ProjectConfig::remove_start(
                             &ctx.project_config_path,

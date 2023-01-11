@@ -1,30 +1,13 @@
-use anyhow::{Context, Result};
+use snafu::{Snafu, ResultExt};
 use std::{collections::hash_map, env};
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum ParsingVarError {
-    VarNotFound(std::env::VarError),
-    Other(anyhow::Error),
-}
-
-impl From<std::env::VarError> for ParsingVarError {
-    fn from(error: std::env::VarError) -> Self {
-        ParsingVarError::VarNotFound(error)
-    }
-}
-impl From<anyhow::Error> for ParsingVarError {
-    fn from(e: anyhow::Error) -> Self {
-        ParsingVarError::Other(e)
-    }
-}
-
-impl From<ParsingVarError> for anyhow::Error {
-    fn from(e: ParsingVarError) -> anyhow::Error {
-        match e {
-            ParsingVarError::VarNotFound(e) => anyhow::Error::new(e),
-            ParsingVarError::Other(e) => e,
-        }
-    }
+    #[error("Internal Var Error: {0}")]
+    VarError(#[from] std::env::VarError),
+    #[error("Could not find var `{0}`")]
+    NotFound(String),
 }
 
 pub fn parse_vars(
@@ -49,10 +32,7 @@ pub fn parse_vars(
                 if use_env {
                     Ok(env::var(text)?)
                 } else {
-                    Err(ParsingVarError::Other(anyhow::Error::msg(format!(
-                        "Could not find extra variable {}",
-                        text
-                    ))))
+                    Err(ParsingVarError::NotFound(text.to_string()))
                 }
             })?;
         output.replace_range(
@@ -67,22 +47,46 @@ pub fn parse_vars(
 
 use serde::{de::DeserializeOwned, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+#[derive(Snafu, Debug)]
+pub enum WritableConfigError {
+    #[snafu(display("Unable to read {}: {}",path.display(),source))]
+    Read {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[snafu(display("Unable to write {}: {}",path.display(),source))]
+    Write {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[snafu(display("Unable to deserialize {}: {}",path.display(),source))]
+    TomlDe {
+        path: PathBuf,
+        source: toml::de::Error,
+    },
+    #[snafu(display("Unable to serialize {}: {}",path.display(),source))]
+    TomlSer {
+        path: PathBuf,
+        source: toml::ser::Error,
+    },
+}
+
 #[async_trait::async_trait]
 pub trait WritableConfig: Sized {
-    fn write_to_file(&self, file_name: &Path) -> Result<()>;
-    fn read_from_file(file_name: &Path) -> Result<Self>;
+    fn write_to_file(&self, file_name: &Path) -> Result<(), WritableConfigError>;
+    fn read_from_file(file_name: &Path) -> Result<Self, WritableConfigError>;
 }
 
 impl<T: Sync + DeserializeOwned + Send + Serialize + Clone> WritableConfig for T {
-    fn write_to_file(&self, path: &Path) -> Result<()> {
-        let data = toml::to_vec(self)?;
-        fs::write(path, &data)?;
+    fn write_to_file(&self, path: &Path) -> Result<(), WritableConfigError> {
+        let data = toml::to_vec(self).context(TomlSerSnafu { path})?;
+        fs::write(path, &data).context(WriteSnafu{path})?;
         Ok(())
     }
-    fn read_from_file(file_name: &Path) -> Result<Self> {
-        let data = fs::read(file_name)?;
-        let val = toml::from_slice(&data)?;
+    fn read_from_file(path: &Path) -> Result<Self, WritableConfigError> {
+        let data = fs::read(path).context(ReadSnafu{path})?;
+        let val = toml::from_slice(&data).context(TomlDeSnafu { path})?;
         Ok(val)
     }
 }
